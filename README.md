@@ -23,8 +23,8 @@ any GUI related features, such as QR code preview. It's size is however much sma
 
 ## Usage
 
-You can use the `bysqr` binary to encode QR codes. PAY payment orders, standing
-orders, and direct debits are supported; decoding is still in progress.
+You can use the `bysqr` binary to encode and decode PAY by square data. Payment
+orders, standing orders, and direct debits are supported.
 
 ### Encoding to QR code
 
@@ -88,6 +88,17 @@ The default quality is set to **90**.
 bysqr encode --src payment.xml --format jpeg --quality 95
 ```
 
+### Decoding a payload
+
+The decoder accepts the Base32hex content carried by the QR code and prints a
+PAY document as JSON or XML. It evaluates the data payload; scanning an image is
+outside the scope of the decoder.
+
+```shell
+bysqr decode --src '000620000...' --format json
+bysqr decode --src payload.txt --format xml
+```
+
 ## Build
 
 To build a project, ensure you have latest [Rust](https://www.rust-lang.org/tools/install) installed. Then, run build using `cargo`:
@@ -103,17 +114,21 @@ You can find `bysqrcli` executable and rust library in `target/release`.
 Both deserialization and encoding return typed errors:
 
 ```rust
-use bysqr::{encoder, models::try_deserialize_pay};
+use bysqr::{decoder, encoder, models::try_deserialize_pay};
 
 let pay = try_deserialize_pay(include_str!("payment.xml"))?;
 let payload = encoder::encode(&pay)?;
+let decoded = decoder::decode(&payload)?;
+assert_eq!(decoded, pay);
 # Ok::<(), bysqr::error::Error>(())
 ```
 
 `encoder::encode_sequence` exposes the uncompressed tab-delimited form for
 conformance tooling. `codec::decode_payload` validates and inspects an encoded
 envelope, including its header, LZMA data, declared two-byte size, CRC32, and
-UTF-8 sequence. It is not yet the promised high-level PAY model decoder.
+UTF-8 sequence. `decoder::decode` validates and reconstructs the complete PAY
+model, while `decoder::decode_sequence` can inspect an already uncompressed
+sequence.
 
 ## Tests
 
@@ -177,7 +192,7 @@ llvm-config --version
 - [x] PAY payment-order encoder
 - [x] PAY standing-order encoder
 - [x] PAY direct-debit encoder
-- [ ] PAY decoder
+- [x] PAY decoder
 - [ ] Invoice encoder
 - [ ] Invoice decoder
 - [ ] alternative JSON input and output structure

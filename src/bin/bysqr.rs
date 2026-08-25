@@ -5,11 +5,11 @@ use std::{
 };
 
 use bysqr::{
-    encoder,
+    decoder, encoder,
     models::{try_deserialize_pay, Pay},
     qr,
 };
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[path = "../preview.rs"]
 #[cfg(feature = "preview")]
@@ -29,31 +29,44 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Encode {
-        #[arg(long = "src", required = false)]
-        src: Option<String>,
+        #[arg(long = "src")]
+        src: String,
 
-        #[arg(long = "format", required = false)]
+        #[arg(long = "format")]
         format: Option<String>,
 
-        #[arg(long = "preview", required = false)]
+        #[arg(long = "preview")]
         preview: bool,
 
-        #[arg(long = "size", required = false, default_value = "512")]
+        #[arg(long = "size", default_value = "512")]
         size: u32,
 
-        #[arg(long = "quality", required = false, default_value = "90")]
+        #[arg(long = "quality", default_value = "90")]
         quality: u8,
 
-        #[arg(long = "save", required = false)]
+        #[arg(long = "save")]
         save: Option<PathBuf>,
 
-        #[arg(long = "overwrite", required = false)]
+        #[arg(long = "overwrite")]
         overwrite: bool,
+    },
+    Decode {
+        #[arg(long = "src")]
+        src: String,
+
+        #[arg(long = "format", value_enum, default_value_t = DataFormat::Json)]
+        format: DataFormat,
     },
 }
 
+#[derive(Clone, Debug, ValueEnum)]
+enum DataFormat {
+    Json,
+    Xml,
+}
+
 #[derive(Debug)]
-enum OutputFormat {
+enum ImageFormat {
     Svg,
     Png,
     Jpeg,
@@ -61,19 +74,19 @@ enum OutputFormat {
 
 #[derive(Debug)]
 enum OutputMode {
-    Save(PathBuf, OutputFormat),
-    Print(OutputFormat),
+    Save(PathBuf, ImageFormat),
+    Print(ImageFormat),
 }
 
 fn cli_error(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message.into())
 }
 
-fn parse_output_format(format: &str) -> Result<OutputFormat, io::Error> {
+fn parse_image_format(format: &str) -> Result<ImageFormat, io::Error> {
     match format.to_ascii_lowercase().as_str() {
-        "svg" => Ok(OutputFormat::Svg),
-        "png" => Ok(OutputFormat::Png),
-        "jpg" | "jpeg" => Ok(OutputFormat::Jpeg),
+        "svg" => Ok(ImageFormat::Svg),
+        "png" => Ok(ImageFormat::Png),
+        "jpg" | "jpeg" => Ok(ImageFormat::Jpeg),
         _ => Err(cli_error(format!(
             "invalid output: extension {format} is not supported"
         ))),
@@ -91,85 +104,111 @@ fn guess_output_mode(
             .ok_or_else(|| cli_error("invalid output: unable to determine the file format"))?;
         Ok(OutputMode::Save(
             destination.clone(),
-            parse_output_format(extension)?,
+            parse_image_format(extension)?,
         ))
     } else {
         let format = requested_format.as_deref().ok_or_else(|| {
             cli_error("missing format: --format is required when printing to standard output")
         })?;
-        Ok(OutputMode::Print(parse_output_format(format)?))
+        Ok(OutputMode::Print(parse_image_format(format)?))
+    }
+}
+
+fn read_source(source: &str) -> Result<String, io::Error> {
+    if Path::new(source).is_file() {
+        fs::read_to_string(source)
+    } else {
+        Ok(source.to_owned())
     }
 }
 
 fn deserialize_pay(source: &str) -> Result<Pay, Box<dyn Error>> {
-    let content = if Path::new(source).is_file() {
-        fs::read_to_string(source)?
-    } else {
-        source.to_owned()
-    };
+    Ok(try_deserialize_pay(&read_source(source)?)?)
+}
 
-    Ok(try_deserialize_pay(&content)?)
+fn run_encode(
+    source: &str,
+    preview_requested: bool,
+    requested_format: &Option<String>,
+    destination: &Option<PathBuf>,
+    size: u32,
+    quality: u8,
+    overwrite: bool,
+) -> Result<(), Box<dyn Error>> {
+    let pay = deserialize_pay(source)?;
+    let encoded = encoder::encode(&pay)?;
+    let svg_code = qr::create_pay_svg(&encoded, qr::Theme::default());
+
+    if preview_requested {
+        #[cfg(feature = "preview")]
+        {
+            preview::show_svg(svg_code);
+            return Ok(());
+        }
+
+        #[cfg(not(feature = "preview"))]
+        {
+            return Err(cli_error(
+                "preview is unavailable because the binary was built without the preview feature",
+            )
+            .into());
+        }
+    }
+
+    match guess_output_mode(destination, requested_format)? {
+        OutputMode::Save(destination, output_format) => {
+            if destination.exists() && !overwrite {
+                return Err(cli_error(format!(
+                    "output file {} already exists; pass --overwrite to replace it",
+                    destination.display()
+                ))
+                .into());
+            }
+
+            let content = match output_format {
+                ImageFormat::Svg => svg_code,
+                ImageFormat::Png => qr::render_png(&svg_code, size),
+                ImageFormat::Jpeg => qr::render_jpeg(&svg_code, size, quality),
+            };
+
+            ensure_directory_for_file(&destination)?;
+            fs::write(destination, content)?;
+        }
+        OutputMode::Print(output_format) => match output_format {
+            ImageFormat::Svg => println!("{}", String::from_utf8(svg_code)?),
+            ImageFormat::Png => println!("{}", qr::to_base64_png(&svg_code, size)),
+            ImageFormat::Jpeg => println!("{}", qr::to_base64_jpeg(&svg_code, size, quality)),
+        },
+    }
+
+    Ok(())
+}
+
+fn run_decode(source: &str, format: &DataFormat) -> Result<(), Box<dyn Error>> {
+    let payload = read_source(source)?;
+    let pay = decoder::decode(payload.trim())?;
+    let output = match format {
+        DataFormat::Json => serde_json::to_string_pretty(&pay)?,
+        DataFormat::Xml => quick_xml::se::to_string(&pay)?,
+    };
+    println!("{output}");
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
-    if let Some(Commands::Encode {
-        src,
-        preview,
-        format,
-        save,
-        size,
-        quality,
-        overwrite,
-    }) = &cli.command
-    {
-        let source = src
-            .as_deref()
-            .ok_or_else(|| cli_error("missing source: --src is required"))?;
-        let pay = deserialize_pay(source)?;
-        let encoded = encoder::encode(&pay)?;
-        let svg_code = qr::create_pay_svg(&encoded, qr::Theme::default());
-
-        if *preview {
-            #[cfg(feature = "preview")]
-            preview::show_svg(svg_code.clone());
-
-            #[cfg(not(feature = "preview"))]
-            return Err(cli_error(
-                "preview is unavailable because the binary was built without the preview feature",
-            )
-            .into());
-        } else {
-            match guess_output_mode(save, format)? {
-                OutputMode::Save(destination, output_format) => {
-                    if destination.exists() && !*overwrite {
-                        return Err(cli_error(format!(
-                            "output file {} already exists; pass --overwrite to replace it",
-                            destination.display()
-                        ))
-                        .into());
-                    }
-
-                    let content = match output_format {
-                        OutputFormat::Svg => svg_code,
-                        OutputFormat::Png => qr::render_png(&svg_code, *size),
-                        OutputFormat::Jpeg => qr::render_jpeg(&svg_code, *size, *quality),
-                    };
-
-                    ensure_directory_for_file(&destination)?;
-                    fs::write(destination, content)?;
-                }
-                OutputMode::Print(output_format) => match output_format {
-                    OutputFormat::Svg => println!("{}", String::from_utf8(svg_code)?),
-                    OutputFormat::Png => println!("{}", qr::to_base64_png(&svg_code, *size)),
-                    OutputFormat::Jpeg => {
-                        println!("{}", qr::to_base64_jpeg(&svg_code, *size, *quality));
-                    }
-                },
-            }
-        }
+    match &cli.command {
+        Some(Commands::Encode {
+            src,
+            preview,
+            format,
+            save,
+            size,
+            quality,
+            overwrite,
+        }) => run_encode(src, *preview, format, save, *size, *quality, *overwrite),
+        Some(Commands::Decode { src, format }) => run_decode(src, format),
+        None => Ok(()),
     }
-
-    Ok(())
 }

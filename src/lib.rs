@@ -4,6 +4,7 @@ use crate::models::Pay;
 use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
 
 pub mod codec;
+pub mod decoder;
 pub mod encoder;
 pub mod error;
 pub mod models;
@@ -34,6 +35,20 @@ pub fn encode_to_jpeg(source: &str, size: u32, quality: u8) -> Result<String, Js
     let encoded = encoder::encode(&pay).map_err(js_error)?;
     let svg = qr::create_pay_svg(&encoded, qr::Theme::default());
     Ok(qr::to_base64_jpeg(&svg, size, quality))
+}
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
+pub fn decode_to_json(payload: &str) -> Result<String, JsValue> {
+    let pay = decoder::decode(payload.trim()).map_err(js_error)?;
+    serde_json::to_string_pretty(&pay).map_err(js_error)
+}
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
+pub fn decode_to_xml(payload: &str) -> Result<String, JsValue> {
+    let pay = decoder::decode(payload.trim()).map_err(js_error)?;
+    quick_xml::se::to_string(&pay).map_err(js_error)
 }
 
 #[cfg(feature = "wasm")]

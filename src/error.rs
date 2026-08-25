@@ -15,6 +15,11 @@ pub enum Error {
     },
     PayloadTooLong(usize),
     InvalidPayload(String),
+    InvalidSequence {
+        position: usize,
+        field: &'static str,
+        message: String,
+    },
     Compression(String),
     ChecksumMismatch {
         expected: u32,
@@ -55,6 +60,14 @@ impl fmt::Display for Error {
             Self::InvalidPayload(message) => {
                 write!(formatter, "invalid by square payload: {message}")
             }
+            Self::InvalidSequence {
+                position,
+                field,
+                message,
+            } => write!(
+                formatter,
+                "invalid PAY sequence field {field} at position {position}: {message}"
+            ),
             Self::Compression(message) => write!(formatter, "LZMA error: {message}"),
             Self::ChecksumMismatch { expected, actual } => write!(
                 formatter,

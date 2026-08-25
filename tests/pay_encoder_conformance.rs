@@ -1,4 +1,4 @@
-use bysqr::{codec::decode_payload, encoder, error::Error, models::try_deserialize_pay};
+use bysqr::{codec::decode_payload, decoder, encoder, error::Error, models::try_deserialize_pay};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -355,4 +355,7 @@ fn combines_standing_order_and_direct_debit_extensions() {
         &fields[20..30],
         &["0", "1", "", "", "RF18539007547034", "", "", "", "", ""]
     );
+
+    let payload = encoder::encode(&pay).unwrap();
+    assert_eq!(decoder::decode(&payload).unwrap(), pay);
 }

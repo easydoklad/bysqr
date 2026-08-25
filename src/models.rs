@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use serde::{
     de::{self, IgnoredAny, MapAccess, Visitor},
-    Deserialize, Deserializer,
+    Deserialize, Deserializer, Serialize, Serializer,
 };
 
 use crate::error::{Error, Result};
@@ -59,6 +59,17 @@ impl PaymentOptions {
 
     pub const fn contains(self, option: PaymentOption) -> bool {
         self.0 & option.classifier() != 0
+    }
+
+    pub fn from_classifier(classifier: u8) -> Result<Self> {
+        if (1..=7).contains(&classifier) {
+            Ok(Self(classifier))
+        } else {
+            Err(Error::invalid(
+                "PaymentOptions",
+                format!("unknown classifier {classifier}"),
+            ))
+        }
     }
 }
 
@@ -130,80 +141,89 @@ impl fmt::Display for PaymentOptions {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+impl Serialize for PaymentOptions {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct Pay {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(rename = "InvoiceID")]
     pub invoice_id: Option<String>,
     pub payments: Payments,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct Payments {
     #[serde(default)]
     pub payment: Vec<Payment>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct Payment {
     pub payment_options: PaymentOptions,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
     pub currency_code: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payment_due_date: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variable_symbol: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constant_symbol: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub specific_symbol: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub originators_reference_information: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payment_note: Option<String>,
     pub bank_accounts: BankAccounts,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub standing_order_ext: Option<StandingOrderExt>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub direct_debit_ext: Option<DirectDebitExt>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beneficiary_name: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(rename = "BeneficiaryAddressLine1")]
     pub beneficiary_address_line1: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(rename = "BeneficiaryAddressLine2")]
     pub beneficiary_address_line2: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct BankAccounts {
     #[serde(default)]
     pub bank_account: Vec<BankAccount>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 pub struct BankAccount {
     pub iban: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bic: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct StandingOrderExt {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub day: Option<u8>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub month: Option<Months>,
     pub periodicity: Periodicity,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_date: Option<String>,
 }
 
@@ -239,6 +259,23 @@ impl Periodicity {
             self,
             Self::Weekly | Self::Biweekly | Self::Monthly | Self::Bimonthly
         )
+    }
+
+    pub fn from_classifier(classifier: char) -> Result<Self> {
+        match classifier {
+            'd' => Ok(Self::Daily),
+            'w' => Ok(Self::Weekly),
+            'b' => Ok(Self::Biweekly),
+            'm' => Ok(Self::Monthly),
+            'B' => Ok(Self::Bimonthly),
+            'q' => Ok(Self::Quarterly),
+            'a' => Ok(Self::Annually),
+            's' => Ok(Self::Semiannually),
+            _ => Err(Error::invalid(
+                "Periodicity",
+                format!("unknown classifier {classifier:?}"),
+            )),
+        }
     }
 }
 
@@ -283,6 +320,15 @@ impl fmt::Display for Periodicity {
             Self::Annually => "Annually",
             Self::Semiannually => "Semiannually",
         })
+    }
+}
+
+impl Serialize for Periodicity {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
 
@@ -391,6 +437,17 @@ impl Months {
     pub const fn contains(self, month: Month) -> bool {
         self.0 & month.classifier() != 0
     }
+
+    pub fn from_classifier(classifier: u16) -> Result<Self> {
+        if (1..=4095).contains(&classifier) {
+            Ok(Self(classifier))
+        } else {
+            Err(Error::invalid(
+                "Month",
+                format!("unknown classifier {classifier}"),
+            ))
+        }
+    }
 }
 
 impl FromStr for Months {
@@ -440,26 +497,43 @@ impl fmt::Display for Months {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+impl Serialize for Months {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct DirectDebitExt {
     pub direct_debit_scheme: DirectDebitScheme,
     pub direct_debit_type: DirectDebitType,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variable_symbol: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub specific_symbol: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub originators_reference_information: Option<String>,
-    #[serde(default, rename = "MandateID")]
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "MandateID")]
     pub mandate_id: Option<String>,
-    #[serde(default, rename = "CreditorID")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "CreditorID"
+    )]
     pub creditor_id: Option<String>,
-    #[serde(default, rename = "ContractID")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "ContractID"
+    )]
     pub contract_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_amount: Option<Amount>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub valid_till_date: Option<String>,
 }
 
@@ -475,6 +549,17 @@ impl DirectDebitScheme {
         match self {
             Self::Other => 0,
             Self::Sepa => 1,
+        }
+    }
+
+    pub fn from_classifier(classifier: u8) -> Result<Self> {
+        match classifier {
+            0 => Ok(Self::Other),
+            1 => Ok(Self::Sepa),
+            _ => Err(Error::invalid(
+                "DirectDebitScheme",
+                format!("unknown classifier {classifier}"),
+            )),
         }
     }
 }
@@ -511,6 +596,15 @@ impl fmt::Display for DirectDebitScheme {
     }
 }
 
+impl Serialize for DirectDebitScheme {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
 #[serde(try_from = "String")]
 pub enum DirectDebitType {
@@ -523,6 +617,17 @@ impl DirectDebitType {
         match self {
             Self::OneOff => 0,
             Self::Recurrent => 1,
+        }
+    }
+
+    pub fn from_classifier(classifier: u8) -> Result<Self> {
+        match classifier {
+            0 => Ok(Self::OneOff),
+            1 => Ok(Self::Recurrent),
+            _ => Err(Error::invalid(
+                "DirectDebitType",
+                format!("unknown classifier {classifier}"),
+            )),
         }
     }
 }
@@ -559,6 +664,15 @@ impl fmt::Display for DirectDebitType {
     }
 }
 
+impl Serialize for DirectDebitType {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 /// A decimal amount kept in its canonical string form.
 ///
 /// Floating-point numbers cannot represent every amount accepted by the
@@ -583,6 +697,15 @@ impl Amount {
 impl fmt::Display for Amount {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
+    }
+}
+
+impl Serialize for Amount {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
     }
 }
 
