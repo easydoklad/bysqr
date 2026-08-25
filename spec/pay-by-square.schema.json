@@ -1,0 +1,453 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/easydoklad/bysqr/main/spec/pay-by-square.schema.json",
+  "title": "PAY by square",
+  "description": "Canonical JSON representation of the PAY document from spec/bysquare.xsd (by-square type 0, version 0, document type 0). Field names intentionally match the XML element names.",
+  "$comment": "The by-square sequence limit of 550 characters is validated by the encoder because it applies to the encoded tab-delimited representation, not directly to the JSON document.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "InvoiceID": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10,
+      "description": "Invoice number or an issuer-internal identifier associated with the payment."
+    },
+    "Payments": {
+      "$ref": "#/$defs/Payments"
+    }
+  },
+  "required": [
+    "Payments"
+  ],
+  "$defs": {
+    "Payments": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One or more payments. For a bulk order, the preferred payment is first.",
+      "properties": {
+        "Payment": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Payment"
+          }
+        }
+      },
+      "required": [
+        "Payment"
+      ]
+    },
+    "Payment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Data for one payment order, standing order, direct debit, or a supported combination.",
+      "properties": {
+        "PaymentOptions": {
+          "$ref": "#/$defs/PaymentOptions"
+        },
+        "Amount": {
+          "$ref": "#/$defs/Amount",
+          "description": "Positive payment amount. Omit it when the payer should enter the amount."
+        },
+        "CurrencyCode": {
+          "$ref": "#/$defs/CurrencyCode"
+        },
+        "PaymentDueDate": {
+          "$ref": "#/$defs/Date",
+          "description": "Payment due date; for a standing order, the date of the first payment."
+        },
+        "VariableSymbol": {
+          "$ref": "#/$defs/VariableSymbol"
+        },
+        "ConstantSymbol": {
+          "$ref": "#/$defs/ConstantSymbol"
+        },
+        "SpecificSymbol": {
+          "$ref": "#/$defs/SpecificSymbol"
+        },
+        "OriginatorsReferenceInformation": {
+          "$ref": "#/$defs/ReferenceInformation"
+        },
+        "PaymentNote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "Message that helps the beneficiary identify the payment."
+        },
+        "BankAccounts": {
+          "$ref": "#/$defs/BankAccounts"
+        },
+        "StandingOrderExt": {
+          "$ref": "#/$defs/StandingOrderExt"
+        },
+        "DirectDebitExt": {
+          "$ref": "#/$defs/DirectDebitExt"
+        },
+        "BeneficiaryName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "Beneficiary name."
+        },
+        "BeneficiaryAddressLine1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 70,
+          "description": "First beneficiary address line."
+        },
+        "BeneficiaryAddressLine2": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 70,
+          "description": "Second beneficiary address line."
+        }
+      },
+      "required": [
+        "PaymentOptions",
+        "CurrencyCode",
+        "BankAccounts"
+      ],
+      "allOf": [
+        {
+          "not": {
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["VariableSymbol"] },
+                  { "required": ["ConstantSymbol"] },
+                  { "required": ["SpecificSymbol"] }
+                ]
+              },
+              { "required": ["OriginatorsReferenceInformation"] }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "PaymentOptions": {
+                "enum": [
+                  "standingorder",
+                  "paymentorder standingorder",
+                  "standingorder directdebit",
+                  "paymentorder standingorder directdebit"
+                ]
+              }
+            },
+            "required": ["PaymentOptions"]
+          },
+          "then": {
+            "required": ["StandingOrderExt"]
+          },
+          "else": {
+            "not": { "required": ["StandingOrderExt"] }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "PaymentOptions": {
+                "enum": [
+                  "directdebit",
+                  "paymentorder directdebit",
+                  "standingorder directdebit",
+                  "paymentorder standingorder directdebit"
+                ]
+              }
+            },
+            "required": ["PaymentOptions"]
+          },
+          "then": {
+            "required": ["DirectDebitExt"]
+          },
+          "else": {
+            "not": { "required": ["DirectDebitExt"] }
+          }
+        }
+      ]
+    },
+    "PaymentOptions": {
+      "type": "string",
+      "description": "Space-separated payment capabilities in canonical order. Classifiers are paymentorder=1, standingorder=2, and directdebit=4.",
+      "enum": [
+        "paymentorder",
+        "standingorder",
+        "directdebit",
+        "paymentorder standingorder",
+        "paymentorder directdebit",
+        "standingorder directdebit",
+        "paymentorder standingorder directdebit"
+      ]
+    },
+    "Amount": {
+      "type": "string",
+      "maxLength": 15,
+      "pattern": "^(?:[1-9][0-9]*(?:\\.[0-9]*[1-9])?|0\\.[0-9]*[1-9])$",
+      "description": "Positive canonical decimal serialized as a string to preserve exact precision: no sign, exponent, redundant leading zeroes, or trailing fractional zeroes."
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "Three-letter ISO 4217 currency code."
+    },
+    "Date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "ISO 8601 calendar date in YYYY-MM-DD form."
+    },
+    "VariableSymbol": {
+      "type": "string",
+      "pattern": "^[0-9]{1,10}$",
+      "description": "Variable symbol with at most 10 digits."
+    },
+    "ConstantSymbol": {
+      "type": "string",
+      "pattern": "^[0-9]{1,4}$",
+      "description": "Constant symbol with at most 4 digits."
+    },
+    "SpecificSymbol": {
+      "type": "string",
+      "pattern": "^[0-9]{1,10}$",
+      "description": "Specific symbol with at most 10 digits."
+    },
+    "ReferenceInformation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 35,
+      "description": "Originator's reference information, typically a SEPA reference."
+    },
+    "BankAccounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One or more beneficiary bank accounts.",
+      "properties": {
+        "BankAccount": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/BankAccount"
+          }
+        }
+      },
+      "required": [
+        "BankAccount"
+      ]
+    },
+    "BankAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Beneficiary bank account in international format.",
+      "properties": {
+        "IBAN": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]{0,30}$",
+          "description": "International Bank Account Number, up to 34 characters."
+        },
+        "BIC": {
+          "type": "string",
+          "pattern": "^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$",
+          "description": "ISO 9362 bank identifier with 8 or 11 characters."
+        }
+      },
+      "required": [
+        "IBAN"
+      ]
+    },
+    "StandingOrderExt": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Standing-order scheduling data.",
+      "properties": {
+        "Day": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31,
+          "description": "Day of month, or weekday where Monday=1 and Sunday=7 for weekly periodicities."
+        },
+        "Month": {
+          "$ref": "#/$defs/Months"
+        },
+        "Periodicity": {
+          "type": "string",
+          "description": "Standing-order recurrence period.",
+          "enum": [
+            "Daily",
+            "Weekly",
+            "Biweekly",
+            "Monthly",
+            "Bimonthly",
+            "Quarterly",
+            "Annually",
+            "Semiannually"
+          ]
+        },
+        "LastDate": {
+          "$ref": "#/$defs/Date",
+          "description": "Date of the final standing-order payment."
+        }
+      },
+      "required": [
+        "Periodicity"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "Periodicity": { "const": "Daily" } },
+            "required": ["Periodicity"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["Day"] },
+                { "required": ["Month"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "Periodicity": { "enum": ["Weekly", "Biweekly"] }
+            },
+            "required": ["Periodicity"]
+          },
+          "then": {
+            "properties": {
+              "Day": { "maximum": 7 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "Periodicity": {
+                "enum": ["Quarterly", "Annually", "Semiannually"]
+              }
+            },
+            "required": ["Periodicity"]
+          },
+          "then": {
+            "not": { "required": ["Month"] }
+          }
+        }
+      ]
+    },
+    "Months": {
+      "type": "string",
+      "pattern": "^(January|February|March|April|May|June|July|August|September|October|November|December)( (January|February|March|April|May|June|July|August|September|October|November|December))*$",
+      "description": "Space-separated non-empty month list. Every month may occur at most once; canonical output orders months from January to December.",
+      "allOf": [
+        { "not": { "pattern": "\\bJanuary\\b.*\\bJanuary\\b" } },
+        { "not": { "pattern": "\\bFebruary\\b.*\\bFebruary\\b" } },
+        { "not": { "pattern": "\\bMarch\\b.*\\bMarch\\b" } },
+        { "not": { "pattern": "\\bApril\\b.*\\bApril\\b" } },
+        { "not": { "pattern": "\\bMay\\b.*\\bMay\\b" } },
+        { "not": { "pattern": "\\bJune\\b.*\\bJune\\b" } },
+        { "not": { "pattern": "\\bJuly\\b.*\\bJuly\\b" } },
+        { "not": { "pattern": "\\bAugust\\b.*\\bAugust\\b" } },
+        { "not": { "pattern": "\\bSeptember\\b.*\\bSeptember\\b" } },
+        { "not": { "pattern": "\\bOctober\\b.*\\bOctober\\b" } },
+        { "not": { "pattern": "\\bNovember\\b.*\\bNovember\\b" } },
+        { "not": { "pattern": "\\bDecember\\b.*\\bDecember\\b" } }
+      ]
+    },
+    "DirectDebitExt": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Direct-debit setup and identification data.",
+      "properties": {
+        "DirectDebitScheme": {
+          "type": "string",
+          "description": "Direct-debit scheme; classifiers are other=0 and SEPA=1.",
+          "enum": ["other", "SEPA"]
+        },
+        "DirectDebitType": {
+          "type": "string",
+          "description": "Direct-debit occurrence type; classifiers are one-off=0 and recurrent=1.",
+          "enum": ["one-off", "recurrent"]
+        },
+        "VariableSymbol": {
+          "$ref": "#/$defs/VariableSymbol"
+        },
+        "SpecificSymbol": {
+          "$ref": "#/$defs/SpecificSymbol"
+        },
+        "OriginatorsReferenceInformation": {
+          "$ref": "#/$defs/ReferenceInformation"
+        },
+        "MandateID": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 35,
+          "description": "SEPA mandate identifier agreed by creditor and debtor."
+        },
+        "CreditorID": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 35,
+          "description": "SEPA creditor identifier."
+        },
+        "ContractID": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 35,
+          "description": "Optional contract identifier agreed by creditor and debtor."
+        },
+        "MaxAmount": {
+          "$ref": "#/$defs/Amount",
+          "description": "Maximum amount the direct debit may collect."
+        },
+        "ValidTillDate": {
+          "$ref": "#/$defs/Date",
+          "description": "Final day on which the direct-debit authorization is valid."
+        }
+      },
+      "required": [
+        "DirectDebitScheme",
+        "DirectDebitType"
+      ],
+      "allOf": [
+        {
+          "not": {
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["VariableSymbol"] },
+                  { "required": ["SpecificSymbol"] }
+                ]
+              },
+              { "required": ["OriginatorsReferenceInformation"] }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "DirectDebitScheme": { "const": "SEPA" } },
+            "required": ["DirectDebitScheme"]
+          },
+          "then": {
+            "required": ["MandateID", "CreditorID"],
+            "not": {
+              "anyOf": [
+                { "required": ["VariableSymbol"] },
+                { "required": ["SpecificSymbol"] },
+                { "required": ["OriginatorsReferenceInformation"] }
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["MandateID"] },
+                { "required": ["CreditorID"] },
+                { "required": ["ContractID"] }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

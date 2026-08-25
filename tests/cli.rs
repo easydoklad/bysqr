@@ -14,6 +14,27 @@ fn fixture() -> Fixture {
 }
 
 #[test]
+fn encodes_canonical_json_file() {
+    let source = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pay/json/standing-order.json"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        .args(["encode", "--src", source, "--format", "svg"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .starts_with("<svg"));
+}
+
+#[test]
 fn decodes_payload_to_json() {
     let fixture = fixture();
     let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))

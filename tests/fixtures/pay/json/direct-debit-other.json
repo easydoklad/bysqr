@@ -1,0 +1,28 @@
+{
+  "InvoiceID": "DD-OTHER",
+  "Payments": {
+    "Payment": [
+      {
+        "PaymentOptions": "directdebit",
+        "CurrencyCode": "EUR",
+        "PaymentNote": "Other direct debit",
+        "BankAccounts": {
+          "BankAccount": [
+            {
+              "IBAN": "SK7700000000000000000000",
+              "BIC": "TATRSKBX"
+            }
+          ]
+        },
+        "DirectDebitExt": {
+          "DirectDebitScheme": "other",
+          "DirectDebitType": "one-off",
+          "VariableSymbol": "123456",
+          "SpecificSymbol": "789",
+          "MaxAmount": "50"
+        },
+        "BeneficiaryName": "Other Creditor"
+      }
+    ]
+  }
+}

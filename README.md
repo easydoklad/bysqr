@@ -36,11 +36,43 @@ bysqr encode --src payment.xml --save ~/Desktop/qr.svg
 bysqr encode --src '<?xml version="1.0"?><Pay type="Pay">...</Pay>' --save ~/Desktop/qr.svg
 ```
 
-Provided source (`--src`) must be a valid PAY by square XML structure. You can either pass a path to the XML file
-or directly provide an XML content.
+Provided source (`--src`) may be a PAY by square XML document or its canonical
+JSON representation. You can pass either a file path or the document itself.
 
-JSON with the same PascalCase field names is also accepted. Amounts are kept as exact decimals, so values such as
-`12.345678` are not rounded through floating-point arithmetic.
+#### JSON input
+
+The canonical JSON structure mirrors `spec/bysquare.xsd`: element names remain
+in PascalCase and XML collections remain explicit objects, such as
+`Payments.Payment` and `BankAccounts.BankAccount`.
+
+```json
+{
+  "Payments": {
+    "Payment": [
+      {
+        "PaymentOptions": "paymentorder",
+        "Amount": "12.34",
+        "CurrencyCode": "EUR",
+        "BankAccounts": {
+          "BankAccount": [
+            { "IBAN": "SK7700000000000000000000" }
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+```shell
+bysqr encode --src payment.json --save ~/Desktop/qr.svg
+```
+
+The [PAY JSON Schema](spec/pay-by-square.schema.json) defines this format using
+JSON Schema Draft 2020-12, including descriptions and constraints derived from
+the PAY part of the XML schema. Canonical amounts are strings so exact decimal
+precision is preserved. Numeric JSON amounts are accepted as an input
+convenience, but schema-conformant documents use strings.
 
 To save generated QR code as image, use `--save` option with path where to save the image. Type of the file is
 determined by the output file extension. We support generating `svg`, `png` and `jpeg` images.
@@ -91,8 +123,9 @@ bysqr encode --src payment.xml --format jpeg --quality 95
 ### Decoding a payload
 
 The decoder accepts the Base32hex content carried by the QR code and prints a
-PAY document as JSON or XML. It evaluates the data payload; scanning an image is
-outside the scope of the decoder.
+PAY document as canonical JSON or XML. JSON output conforms to
+[`spec/pay-by-square.schema.json`](spec/pay-by-square.schema.json). The decoder
+evaluates the data payload; scanning an image is outside its scope.
 
 ```shell
 bysqr decode --src '000620000...' --format json
@@ -128,7 +161,9 @@ conformance tooling. `codec::decode_payload` validates and inspects an encoded
 envelope, including its header, LZMA data, declared two-byte size, CRC32, and
 UTF-8 sequence. `decoder::decode` validates and reconstructs the complete PAY
 model, while `decoder::decode_sequence` can inspect an already uncompressed
-sequence.
+sequence. The same schema used by the fixture suite is embedded in the library
+as `bysqr::PAY_JSON_SCHEMA` for consumers that want to validate JSON before
+encoding it.
 
 ## Tests
 
@@ -193,9 +228,9 @@ llvm-config --version
 - [x] PAY standing-order encoder
 - [x] PAY direct-debit encoder
 - [x] PAY decoder
+- [x] PAY JSON input/output and JSON Schema
 - [ ] Invoice encoder
 - [ ] Invoice decoder
-- [ ] alternative JSON input and output structure
 - [ ] theming
 - [ ] support for different logo position
 - [ ] general code refactoring

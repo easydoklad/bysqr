@@ -3,7 +3,7 @@
     "Payment": [
       {
         "PaymentOptions": "paymentorder",
-        "Amount": 12.34,
+        "Amount": "12.34",
         "CurrencyCode": "EUR",
         "BankAccounts": {
           "BankAccount": [

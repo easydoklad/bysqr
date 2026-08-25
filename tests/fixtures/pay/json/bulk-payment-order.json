@@ -1,0 +1,46 @@
+{
+  "InvoiceID": "BATCH-1",
+  "Payments": {
+    "Payment": [
+      {
+        "PaymentOptions": "paymentorder",
+        "Amount": "1.5",
+        "CurrencyCode": "EUR",
+        "PaymentDueDate": "2026-08-31",
+        "VariableSymbol": "1",
+        "ConstantSymbol": "0308",
+        "SpecificSymbol": "2",
+        "PaymentNote": "First payment",
+        "BankAccounts": {
+          "BankAccount": [
+            {
+              "IBAN": "SK7700000000000000000000"
+            },
+            {
+              "IBAN": "CZ6508000000192000145399",
+              "BIC": "GIBACZPX"
+            }
+          ]
+        },
+        "BeneficiaryName": "Alice Example",
+        "BeneficiaryAddressLine1": "Main 1",
+        "BeneficiaryAddressLine2": "Bratislava"
+      },
+      {
+        "PaymentOptions": "paymentorder",
+        "CurrencyCode": "USD",
+        "OriginatorsReferenceInformation": "RF18539007547034",
+        "PaymentNote": "Second payment",
+        "BankAccounts": {
+          "BankAccount": [
+            {
+              "IBAN": "GB82WEST12345698765432",
+              "BIC": "NWBKGB2L"
+            }
+          ]
+        },
+        "BeneficiaryName": "Bob Example"
+      }
+    ]
+  }
+}

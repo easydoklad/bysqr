@@ -1,0 +1,30 @@
+{
+  "InvoiceID": "STAND-1",
+  "Payments": {
+    "Payment": [
+      {
+        "PaymentOptions": "paymentorder standingorder",
+        "Amount": "42.5",
+        "CurrencyCode": "EUR",
+        "PaymentDueDate": "2026-09-01",
+        "VariableSymbol": "202609",
+        "PaymentNote": "Standing fixture",
+        "BankAccounts": {
+          "BankAccount": [
+            {
+              "IBAN": "SK7700000000000000000000",
+              "BIC": "TATRSKBX"
+            }
+          ]
+        },
+        "StandingOrderExt": {
+          "Day": 15,
+          "Month": "January April July October",
+          "Periodicity": "Monthly",
+          "LastDate": "2027-09-01"
+        },
+        "BeneficiaryName": "Standing Recipient"
+      }
+    ]
+  }
+}

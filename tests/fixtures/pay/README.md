@@ -13,3 +13,7 @@ The `xsd-*.json` files cover combinations and boundaries derived from
 `spec/bysquare.xsd`. Their expected sequences follow the ordering rules from the
 by-square specification, including the special bulk-payment beneficiary
 ordering.
+
+The documents in `json/` are canonical JSON equivalents of the XSD-derived XML
+fixtures. They are validated against `spec/pay-by-square.schema.json` and must
+encode to exactly the same tab-delimited sequences as their XML counterparts.

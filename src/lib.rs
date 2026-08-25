@@ -10,6 +10,9 @@ pub mod error;
 pub mod models;
 pub mod qr;
 
+/// Canonical PAY JSON Schema (Draft 2020-12), derived from `bysquare.xsd`.
+pub const PAY_JSON_SCHEMA: &str = include_str!("../spec/pay-by-square.schema.json");
+
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn encode_to_svg(source: &str) -> Result<String, JsValue> {

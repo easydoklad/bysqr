@@ -1,0 +1,31 @@
+{
+  "InvoiceID": "DD-SEPA",
+  "Payments": {
+    "Payment": [
+      {
+        "PaymentOptions": "paymentorder directdebit",
+        "Amount": "125.5",
+        "CurrencyCode": "EUR",
+        "PaymentDueDate": "2026-10-01",
+        "PaymentNote": "SEPA direct debit",
+        "BankAccounts": {
+          "BankAccount": [
+            {
+              "IBAN": "SK7700000000000000000000"
+            }
+          ]
+        },
+        "DirectDebitExt": {
+          "DirectDebitScheme": "SEPA",
+          "DirectDebitType": "recurrent",
+          "MandateID": "MANDATE-42",
+          "CreditorID": "SK12ZZZ00000000001",
+          "ContractID": "CONTRACT-42",
+          "MaxAmount": "250.75",
+          "ValidTillDate": "2027-12-31"
+        },
+        "BeneficiaryName": "SEPA Creditor"
+      }
+    ]
+  }
+}
