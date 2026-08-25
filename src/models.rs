@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use serde::{
     de::{self, IgnoredAny, MapAccess, Visitor},
@@ -6,6 +6,129 @@ use serde::{
 };
 
 use crate::error::{Error, Result};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PaymentOption {
+    PaymentOrder,
+    StandingOrder,
+    DirectDebit,
+}
+
+impl PaymentOption {
+    const fn classifier(self) -> u8 {
+        match self {
+            Self::PaymentOrder => 1,
+            Self::StandingOrder => 2,
+            Self::DirectDebit => 4,
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::PaymentOrder => "paymentorder",
+            Self::StandingOrder => "standingorder",
+            Self::DirectDebit => "directdebit",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
+#[serde(try_from = "String")]
+pub struct PaymentOptions(u8);
+
+impl PaymentOptions {
+    pub fn new(options: impl IntoIterator<Item = PaymentOption>) -> Result<Self> {
+        let mut classifier = 0;
+        for option in options {
+            classifier |= option.classifier();
+        }
+
+        if classifier == 0 {
+            return Err(Error::invalid(
+                "PaymentOptions",
+                "must contain at least one option",
+            ));
+        }
+
+        Ok(Self(classifier))
+    }
+
+    pub const fn classifier(self) -> u8 {
+        self.0
+    }
+
+    pub const fn contains(self, option: PaymentOption) -> bool {
+        self.0 & option.classifier() != 0
+    }
+}
+
+impl FromStr for PaymentOptions {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        let mut classifier = 0;
+        let mut found = false;
+
+        for name in value.split_whitespace() {
+            found = true;
+            let option = match name {
+                "paymentorder" => PaymentOption::PaymentOrder,
+                "standingorder" => PaymentOption::StandingOrder,
+                "directdebit" => PaymentOption::DirectDebit,
+                _ => {
+                    return Err(Error::invalid(
+                        "PaymentOptions",
+                        format!("unknown option {name:?}"),
+                    ));
+                }
+            };
+            let bit = option.classifier();
+            if classifier & bit != 0 {
+                return Err(Error::invalid(
+                    "PaymentOptions",
+                    format!("contains duplicate option {name:?}"),
+                ));
+            }
+            classifier |= bit;
+        }
+
+        if !found {
+            return Err(Error::invalid(
+                "PaymentOptions",
+                "must contain at least one option",
+            ));
+        }
+
+        Ok(Self(classifier))
+    }
+}
+
+impl TryFrom<String> for PaymentOptions {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        value.parse()
+    }
+}
+
+impl fmt::Display for PaymentOptions {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let options = [
+            PaymentOption::PaymentOrder,
+            PaymentOption::StandingOrder,
+            PaymentOption::DirectDebit,
+        ];
+        let mut separator = "";
+        for option in options {
+            if self.contains(option) {
+                formatter.write_str(separator)?;
+                formatter.write_str(option.name())?;
+                separator = " ";
+            }
+        }
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
@@ -26,7 +149,7 @@ pub struct Payments {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct Payment {
-    pub payment_options: String,
+    pub payment_options: PaymentOptions,
     #[serde(default)]
     pub amount: Option<Amount>,
     pub currency_code: String,
@@ -78,10 +201,243 @@ pub struct StandingOrderExt {
     #[serde(default)]
     pub day: Option<u8>,
     #[serde(default)]
-    pub month: Option<String>,
-    pub periodicity: String,
+    pub month: Option<Months>,
+    pub periodicity: Periodicity,
     #[serde(default)]
     pub last_date: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
+#[serde(try_from = "String")]
+pub enum Periodicity {
+    Daily,
+    Weekly,
+    Biweekly,
+    Monthly,
+    Bimonthly,
+    Quarterly,
+    Annually,
+    Semiannually,
+}
+
+impl Periodicity {
+    pub const fn classifier(self) -> char {
+        match self {
+            Self::Daily => 'd',
+            Self::Weekly => 'w',
+            Self::Biweekly => 'b',
+            Self::Monthly => 'm',
+            Self::Bimonthly => 'B',
+            Self::Quarterly => 'q',
+            Self::Annually => 'a',
+            Self::Semiannually => 's',
+        }
+    }
+
+    pub const fn allows_months(self) -> bool {
+        matches!(
+            self,
+            Self::Weekly | Self::Biweekly | Self::Monthly | Self::Bimonthly
+        )
+    }
+}
+
+impl FromStr for Periodicity {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value {
+            "Daily" => Ok(Self::Daily),
+            "Weekly" => Ok(Self::Weekly),
+            "Biweekly" => Ok(Self::Biweekly),
+            "Monthly" => Ok(Self::Monthly),
+            "Bimonthly" => Ok(Self::Bimonthly),
+            "Quarterly" => Ok(Self::Quarterly),
+            "Annually" => Ok(Self::Annually),
+            "Semiannually" => Ok(Self::Semiannually),
+            _ => Err(Error::invalid(
+                "Periodicity",
+                format!("unknown value {value:?}"),
+            )),
+        }
+    }
+}
+
+impl TryFrom<String> for Periodicity {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        value.parse()
+    }
+}
+
+impl fmt::Display for Periodicity {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Daily => "Daily",
+            Self::Weekly => "Weekly",
+            Self::Biweekly => "Biweekly",
+            Self::Monthly => "Monthly",
+            Self::Bimonthly => "Bimonthly",
+            Self::Quarterly => "Quarterly",
+            Self::Annually => "Annually",
+            Self::Semiannually => "Semiannually",
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Month {
+    January,
+    February,
+    March,
+    April,
+    May,
+    June,
+    July,
+    August,
+    September,
+    October,
+    November,
+    December,
+}
+
+impl Month {
+    const ALL: [Self; 12] = [
+        Self::January,
+        Self::February,
+        Self::March,
+        Self::April,
+        Self::May,
+        Self::June,
+        Self::July,
+        Self::August,
+        Self::September,
+        Self::October,
+        Self::November,
+        Self::December,
+    ];
+
+    const fn classifier(self) -> u16 {
+        1 << self.index()
+    }
+
+    const fn index(self) -> u8 {
+        match self {
+            Self::January => 0,
+            Self::February => 1,
+            Self::March => 2,
+            Self::April => 3,
+            Self::May => 4,
+            Self::June => 5,
+            Self::July => 6,
+            Self::August => 7,
+            Self::September => 8,
+            Self::October => 9,
+            Self::November => 10,
+            Self::December => 11,
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::January => "January",
+            Self::February => "February",
+            Self::March => "March",
+            Self::April => "April",
+            Self::May => "May",
+            Self::June => "June",
+            Self::July => "July",
+            Self::August => "August",
+            Self::September => "September",
+            Self::October => "October",
+            Self::November => "November",
+            Self::December => "December",
+        }
+    }
+}
+
+impl FromStr for Month {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        Month::ALL
+            .into_iter()
+            .find(|month| month.name() == value)
+            .ok_or_else(|| Error::invalid("Month", format!("unknown value {value:?}")))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
+#[serde(try_from = "String")]
+pub struct Months(u16);
+
+impl Months {
+    pub fn new(months: impl IntoIterator<Item = Month>) -> Result<Self> {
+        let mut classifier = 0;
+        for month in months {
+            classifier |= month.classifier();
+        }
+        if classifier == 0 {
+            return Err(Error::invalid("Month", "must contain at least one month"));
+        }
+        Ok(Self(classifier))
+    }
+
+    pub const fn classifier(self) -> u16 {
+        self.0
+    }
+
+    pub const fn contains(self, month: Month) -> bool {
+        self.0 & month.classifier() != 0
+    }
+}
+
+impl FromStr for Months {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        let mut classifier = 0;
+        let mut found = false;
+        for name in value.split_whitespace() {
+            found = true;
+            let month: Month = name.parse()?;
+            let bit = month.classifier();
+            if classifier & bit != 0 {
+                return Err(Error::invalid(
+                    "Month",
+                    format!("contains duplicate month {name:?}"),
+                ));
+            }
+            classifier |= bit;
+        }
+        if !found {
+            return Err(Error::invalid("Month", "must contain at least one month"));
+        }
+        Ok(Self(classifier))
+    }
+}
+
+impl TryFrom<String> for Months {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        value.parse()
+    }
+}
+
+impl fmt::Display for Months {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut separator = "";
+        for month in Month::ALL {
+            if self.contains(month) {
+                formatter.write_str(separator)?;
+                formatter.write_str(month.name())?;
+                separator = " ";
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -310,7 +666,10 @@ fn normalize_number(value: &str, allow_exponent: bool) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_number, try_deserialize_pay, Amount};
+    use super::{
+        normalize_number, try_deserialize_pay, Amount, Month, Months, PaymentOption,
+        PaymentOptions, Periodicity,
+    };
 
     #[test]
     fn normalizes_decimal_without_losing_precision() {
@@ -338,5 +697,53 @@ mod tests {
     fn deserializes_json_numeric_amount() {
         let amount: Amount = serde_json::from_str("12.345678").unwrap();
         assert_eq!(amount.as_str(), "12.345678");
+    }
+
+    #[test]
+    fn maps_payment_options_to_classifier() {
+        let options: PaymentOptions = "directdebit paymentorder standingorder".parse().unwrap();
+
+        assert_eq!(options.classifier(), 7);
+        assert!(options.contains(PaymentOption::PaymentOrder));
+        assert!(options.contains(PaymentOption::StandingOrder));
+        assert!(options.contains(PaymentOption::DirectDebit));
+        assert_eq!(
+            options.to_string(),
+            "paymentorder standingorder directdebit"
+        );
+        assert!("paymentorder paymentorder"
+            .parse::<PaymentOptions>()
+            .is_err());
+    }
+
+    #[test]
+    fn maps_periodicities_to_classifiers() {
+        for (value, classifier) in [
+            ("Daily", 'd'),
+            ("Weekly", 'w'),
+            ("Biweekly", 'b'),
+            ("Monthly", 'm'),
+            ("Bimonthly", 'B'),
+            ("Quarterly", 'q'),
+            ("Annually", 'a'),
+            ("Semiannually", 's'),
+        ] {
+            assert_eq!(
+                value.parse::<Periodicity>().unwrap().classifier(),
+                classifier
+            );
+        }
+        assert!("monthly".parse::<Periodicity>().is_err());
+    }
+
+    #[test]
+    fn sums_month_classifiers() {
+        let months: Months = "January April July October".parse().unwrap();
+
+        assert_eq!(months.classifier(), 585);
+        assert!(months.contains(Month::January));
+        assert!(months.contains(Month::October));
+        assert_eq!(months.to_string(), "January April July October");
+        assert!("January January".parse::<Months>().is_err());
     }
 }

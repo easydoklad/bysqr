@@ -1,0 +1,6 @@
+{
+  "name": "XSD-derived standing order",
+  "schema": "spec/bysquare.xsd",
+  "source": "<?xml version=\"1.0\"?>\n<Pay type=\"Pay\">\n  <InvoiceID>STAND-1</InvoiceID>\n  <Payments>\n    <Payment>\n      <PaymentOptions>paymentorder standingorder</PaymentOptions>\n      <Amount>42.5</Amount>\n      <CurrencyCode>EUR</CurrencyCode>\n      <PaymentDueDate>2026-09-01</PaymentDueDate>\n      <VariableSymbol>202609</VariableSymbol>\n      <PaymentNote>Standing fixture</PaymentNote>\n      <BankAccounts>\n        <BankAccount><IBAN>SK7700000000000000000000</IBAN><BIC>TATRSKBX</BIC></BankAccount>\n      </BankAccounts>\n      <StandingOrderExt>\n        <Day>15</Day>\n        <Month>January April July October</Month>\n        <Periodicity>Monthly</Periodicity>\n        <LastDate>2027-09-01</LastDate>\n      </StandingOrderExt>\n      <BeneficiaryName>Standing Recipient</BeneficiaryName>\n    </Payment>\n  </Payments>\n</Pay>",
+  "expected_sequence": "STAND-1\t1\t3\t42.5\tEUR\t20260901\t202609\t\t\t\tStanding fixture\t1\tSK7700000000000000000000\tTATRSKBX\t1\t15\t585\tm\t20270901\t0\tStanding Recipient\t\t"
+}

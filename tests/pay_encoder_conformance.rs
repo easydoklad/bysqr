@@ -33,10 +33,8 @@ fn pay_with(payments: Vec<serde_json::Value>) -> serde_json::Value {
     json!({ "Payments": { "Payment": payments } })
 }
 
-#[test]
-fn xsd_derived_bulk_fixture_uses_beneficiary_tail_ordering() {
-    let fixture: SequenceFixture =
-        serde_json::from_str(include_str!("fixtures/pay/xsd-bulk-payment-order.json")).unwrap();
+fn assert_sequence_fixture(content: &str) {
+    let fixture: SequenceFixture = serde_json::from_str(content).unwrap();
     assert_eq!(fixture.schema, "spec/bysquare.xsd");
 
     let pay = try_deserialize_pay(&fixture.source).unwrap();
@@ -45,6 +43,16 @@ fn xsd_derived_bulk_fixture_uses_beneficiary_tail_ordering() {
 
     let payload = encoder::encode(&pay).unwrap();
     assert_eq!(decode_payload(&payload).unwrap().sequence, sequence);
+}
+
+#[test]
+fn xsd_derived_bulk_fixture_uses_beneficiary_tail_ordering() {
+    assert_sequence_fixture(include_str!("fixtures/pay/xsd-bulk-payment-order.json"));
+}
+
+#[test]
+fn xsd_derived_standing_order_fixture() {
+    assert_sequence_fixture(include_str!("fixtures/pay/xsd-standing-order.json"));
 }
 
 #[test]
@@ -137,13 +145,107 @@ fn rejects_empty_and_oversized_payment_collections() {
 #[test]
 fn reports_unimplemented_payment_extensions() {
     let source = pay_with(vec![minimal_payment(json!({
-        "PaymentOptions": "paymentorder standingorder",
-        "StandingOrderExt": {
-            "Day": 1,
-            "Periodicity": "monthly"
+        "PaymentOptions": "paymentorder directdebit",
+        "DirectDebitExt": {
+            "DirectDebitScheme": "SEPA",
+            "DirectDebitType": "recurrent",
+            "MandateID": "MANDATE-1",
+            "CreditorID": "CREDITOR-1",
+            "ContractID": "CONTRACT-1"
         }
     }))]);
     let pay = try_deserialize_pay(&source.to_string()).unwrap();
 
     assert!(matches!(encoder::encode(&pay), Err(Error::Unsupported(_))));
+}
+
+#[test]
+fn validates_standing_order_option_and_extension_pair() {
+    let missing_extension = pay_with(vec![minimal_payment(json!({
+        "PaymentOptions": "standingorder"
+    }))]);
+    let pay = try_deserialize_pay(&missing_extension.to_string()).unwrap();
+    assert!(matches!(
+        encoder::encode(&pay),
+        Err(Error::InvalidInput {
+            field: "StandingOrderExt",
+            ..
+        })
+    ));
+
+    let missing_option = pay_with(vec![minimal_payment(json!({
+        "StandingOrderExt": { "Periodicity": "Daily" }
+    }))]);
+    let pay = try_deserialize_pay(&missing_option.to_string()).unwrap();
+    assert!(matches!(
+        encoder::encode(&pay),
+        Err(Error::InvalidInput {
+            field: "PaymentOptions",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn validates_standing_order_day_and_month_rules() {
+    let cases = [
+        (
+            "daily day",
+            json!({ "Day": 1, "Periodicity": "Daily" }),
+            "Day",
+        ),
+        (
+            "weekly day",
+            json!({ "Day": 8, "Periodicity": "Weekly" }),
+            "Day",
+        ),
+        (
+            "monthly day",
+            json!({ "Day": 32, "Periodicity": "Monthly" }),
+            "Day",
+        ),
+        (
+            "quarterly months",
+            json!({ "Month": "January April", "Periodicity": "Quarterly" }),
+            "Month",
+        ),
+        (
+            "invalid last date",
+            json!({ "Periodicity": "Daily", "LastDate": "2026-02-30" }),
+            "LastDate",
+        ),
+    ];
+
+    for (name, extension, expected_field) in cases {
+        let source = pay_with(vec![minimal_payment(json!({
+            "PaymentOptions": "standingorder",
+            "StandingOrderExt": extension
+        }))]);
+        let pay = try_deserialize_pay(&source.to_string()).unwrap();
+        assert!(
+            matches!(
+                encoder::encode(&pay),
+                Err(Error::InvalidInput { field, .. }) if field == expected_field
+            ),
+            "{name} was accepted"
+        );
+    }
+}
+
+#[test]
+fn accepts_weekly_day_and_month_selection() {
+    let source = pay_with(vec![minimal_payment(json!({
+        "PaymentOptions": "standingorder paymentorder",
+        "StandingOrderExt": {
+            "Day": 7,
+            "Month": "January December",
+            "Periodicity": "Weekly"
+        }
+    }))]);
+    let pay = try_deserialize_pay(&source.to_string()).unwrap();
+    let sequence = encoder::encode_sequence(&pay).unwrap();
+    let fields: Vec<_> = sequence.split('\t').collect();
+
+    assert_eq!(fields[2], "3");
+    assert_eq!(&fields[14..20], &["1", "7", "2049", "w", "", "0"]);
 }

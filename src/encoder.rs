@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use crate::{
     codec::{self, Header},
     error::{Error, Result},
-    models::{BankAccount, Pay, Payment},
+    models::{BankAccount, Pay, Payment, PaymentOption, Periodicity, StandingOrderExt},
 };
 
 pub const MAX_SEQUENCE_CHARACTERS: usize = 550;
@@ -67,22 +67,34 @@ pub fn encode_sequence(pay: &Pay) -> Result<String> {
 }
 
 fn append_payment_core(fields: &mut Vec<String>, payment: &Payment) -> Result<()> {
-    let options = payment_options_classifier(&payment.payment_options)?;
-    let has_standing_order = options & 2 != 0;
-    let has_direct_debit = options & 4 != 0;
+    let options = payment.payment_options;
+    let has_standing_order = options.contains(PaymentOption::StandingOrder);
+    let has_direct_debit = options.contains(PaymentOption::DirectDebit);
 
-    if has_standing_order || payment.standing_order_ext.is_some() {
-        return Err(Error::Unsupported(
-            "standing-order encoding is not implemented yet".to_owned(),
-        ));
-    }
     if has_direct_debit || payment.direct_debit_ext.is_some() {
         return Err(Error::Unsupported(
             "direct-debit encoding is not implemented yet".to_owned(),
         ));
     }
 
-    fields.push(options.to_string());
+    let standing_order = match (has_standing_order, payment.standing_order_ext.as_ref()) {
+        (false, None) => None,
+        (true, Some(extension)) => Some(extension),
+        (true, None) => {
+            return Err(Error::invalid(
+                "StandingOrderExt",
+                "is required when PaymentOptions contains standingorder",
+            ));
+        }
+        (false, Some(_)) => {
+            return Err(Error::invalid(
+                "PaymentOptions",
+                "must contain standingorder when StandingOrderExt is present",
+            ));
+        }
+    };
+
+    fields.push(options.classifier().to_string());
 
     let amount = match &payment.amount {
         None => String::new(),
@@ -109,7 +121,7 @@ fn append_payment_core(fields: &mut Vec<String>, payment: &Payment) -> Result<()
     fields.push(currency);
 
     fields.push(match payment.payment_due_date.as_deref() {
-        Some(value) => valid_date(value)?,
+        Some(value) => valid_date("PaymentDueDate", value)?,
         None => String::new(),
     });
 
@@ -161,9 +173,67 @@ fn append_payment_core(fields: &mut Vec<String>, payment: &Payment) -> Result<()
         append_bank_account(fields, account)?;
     }
 
-    // Optional complex values are represented by a zero/one occurrence count.
+    append_standing_order(fields, standing_order)?;
+
+    // DirectDebitExt remains absent until its encoder is implemented.
     fields.push("0".to_owned());
-    fields.push("0".to_owned());
+
+    Ok(())
+}
+
+fn append_standing_order(
+    fields: &mut Vec<String>,
+    standing_order: Option<&StandingOrderExt>,
+) -> Result<()> {
+    let Some(standing_order) = standing_order else {
+        fields.push("0".to_owned());
+        return Ok(());
+    };
+
+    let day = match standing_order.day {
+        None => String::new(),
+        Some(_) if standing_order.periodicity == Periodicity::Daily => {
+            return Err(Error::invalid(
+                "Day",
+                "must not be specified for Daily periodicity",
+            ));
+        }
+        Some(day)
+            if matches!(
+                standing_order.periodicity,
+                Periodicity::Weekly | Periodicity::Biweekly
+            ) && !(1..=7).contains(&day) =>
+        {
+            return Err(Error::invalid(
+                "Day",
+                "must be between 1 and 7 for Weekly or Biweekly periodicity",
+            ));
+        }
+        Some(day) if !(1..=31).contains(&day) => {
+            return Err(Error::invalid("Day", "must be between 1 and 31"));
+        }
+        Some(day) => day.to_string(),
+    };
+
+    let month = match standing_order.month {
+        None => String::new(),
+        Some(_) if !standing_order.periodicity.allows_months() => {
+            return Err(Error::invalid(
+                "Month",
+                "is allowed only for Weekly, Biweekly, Monthly, or Bimonthly periodicity",
+            ));
+        }
+        Some(months) => months.classifier().to_string(),
+    };
+
+    fields.push("1".to_owned());
+    fields.push(day);
+    fields.push(month);
+    fields.push(standing_order.periodicity.classifier().to_string());
+    fields.push(match standing_order.last_date.as_deref() {
+        Some(value) => valid_date("LastDate", value)?,
+        None => String::new(),
+    });
 
     Ok(())
 }
@@ -209,43 +279,14 @@ fn append_bank_account(fields: &mut Vec<String>, account: &BankAccount) -> Resul
     Ok(())
 }
 
-fn payment_options_classifier(value: &str) -> Result<u8> {
-    let mut classifier = 0_u8;
-    let mut found = false;
-
-    for option in value.split_whitespace() {
-        found = true;
-        classifier |= match option {
-            "paymentorder" => 1,
-            "standingorder" => 2,
-            "directdebit" => 4,
-            _ => {
-                return Err(Error::invalid(
-                    "PaymentOptions",
-                    format!("unknown option {option:?}"),
-                ));
-            }
-        };
-    }
-
-    if !found {
-        return Err(Error::invalid(
-            "PaymentOptions",
-            "must contain at least one option",
-        ));
-    }
-
-    Ok(classifier)
-}
-
-fn valid_date(value: &str) -> Result<String> {
+fn valid_date(field: &'static str, value: &str) -> Result<String> {
     let value = sanitized(value);
     let parsed = match value.len() {
         8 => NaiveDate::parse_from_str(&value, "%Y%m%d"),
         10 => NaiveDate::parse_from_str(&value, "%Y-%m-%d"),
         _ => {
             return Err(Error::invalid(
-                "PaymentDueDate",
+                field,
                 "must use YYYY-MM-DD or YYYYMMDD format",
             ));
         }
@@ -253,7 +294,7 @@ fn valid_date(value: &str) -> Result<String> {
 
     parsed
         .map(|date| date.format("%Y%m%d").to_string())
-        .map_err(|_| Error::invalid("PaymentDueDate", format!("{value:?} is not a valid date")))
+        .map_err(|_| Error::invalid(field, format!("{value:?} is not a valid date")))
 }
 
 fn optional_digits(field: &'static str, value: Option<&str>, maximum: usize) -> Result<String> {
