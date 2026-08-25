@@ -1,0 +1,6 @@
+{
+  "name": "valid invoice id and exact decimal precision",
+  "source": "<?xml version=\"1.0\"?>\n<Pay type=\"Pay\">\n  <InvoiceID>INV-42</InvoiceID>\n  <Payments>\n    <Payment>\n      <PaymentOptions>paymentorder</PaymentOptions>\n      <Amount>12.345678</Amount>\n      <CurrencyCode>EUR</CurrencyCode>\n      <BankAccounts><BankAccount><IBAN>SK7700000000000000000000</IBAN></BankAccount></BankAccounts>\n      <BeneficiaryName>Precision Fixture</BeneficiaryName>\n    </Payment>\n  </Payments>\n</Pay>",
+  "payload": "0005C0003I4HDBBMD4ARK69A3HSDBVSMH6PGHV1R4CA52770DE4D7TAGTDOPMQHSDNNDIIS981U4S4T5427BNA7KOHHSDPRNSLJ1Q4QETRH0BQ00",
+  "expected_sequence": "INV-42\t1\t1\t12.345678\tEUR\t\t\t\t\t\t\t1\tSK7700000000000000000000\t\t0\t0\tPrecision Fixture\t\t"
+}

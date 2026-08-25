@@ -1,10 +1,11 @@
 use eframe::egui;
-use eframe::egui::{Color32, ColorImage, Image, Margin, TextureOptions};
 use eframe::egui::load::SizedTexture;
+use eframe::egui::{Color32, ColorImage, Image, Margin, TextureOptions};
 
 pub fn show_svg(code: Vec<u8>) {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([crate::qr::CONTAINER_WIDTH, crate::qr::CONTAINER_HEIGHT]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([crate::qr::CONTAINER_WIDTH, crate::qr::CONTAINER_HEIGHT]),
         ..Default::default()
     };
 
@@ -20,10 +21,17 @@ pub fn show_svg(code: Vec<u8>) {
 
         egui::CentralPanel::default().frame(bg).show(ctx, |ui| {
             let svg = crate::qr::map_svg(&code, crate::qr::CONTAINER_WIDTH as u32);
-            let color_image = ColorImage::from_rgba_unmultiplied([crate::qr::CONTAINER_WIDTH as usize, crate::qr::CONTAINER_HEIGHT as usize], svg.data());
+            let color_image = ColorImage::from_rgba_unmultiplied(
+                [
+                    crate::qr::CONTAINER_WIDTH as usize,
+                    crate::qr::CONTAINER_HEIGHT as usize,
+                ],
+                svg.data(),
+            );
             let texture = ctx.load_texture("qr.png", color_image, TextureOptions::default());
             let sized_texture = SizedTexture::from_handle(&texture);
             ui.add(Image::new(sized_texture))
         });
-    }).expect("unable to show preview");
+    })
+    .expect("unable to show preview");
 }

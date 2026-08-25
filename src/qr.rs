@@ -1,9 +1,9 @@
 use base64::Engine;
+use jpeg_encoder::{ColorType, Encoder};
 use qrcode::render::svg;
-use qrcode::QrCode;
+use qrcode::{EcLevel, QrCode};
 use resvg::tiny_skia::Pixmap;
 use std::collections::HashMap;
-use jpeg_encoder::{ColorType, Encoder};
 use usvg::{Options, Transform, Tree};
 use xmltree::{Element, EmitterConfig};
 
@@ -18,8 +18,8 @@ pub struct Theme {
     pay_text_color: String,
 }
 
-impl Theme {
-    pub fn default() -> Self {
+impl Default for Theme {
+    fn default() -> Self {
         Self {
             background_color: String::from("#ffffff"),
             outline_color: String::from("#6fa4d7"),
@@ -85,9 +85,15 @@ fn insert_pay_icon(svg: &mut Element, color: &str) {
 
     let mut path = Element::new("path");
     path.attributes = HashMap::from([
-        ("d".to_string(), "m15.46 40.44 63.25-9.22.74 5.06L16.2 45.5l-.73-5.06Z".to_string()),
+        (
+            "d".to_string(),
+            "m15.46 40.44 63.25-9.22.74 5.06L16.2 45.5l-.73-5.06Z".to_string(),
+        ),
         ("fill".to_string(), color.to_string()),
-        ("transform".to_string(), format!("translate({},{})", translate_x, translate_y)),
+        (
+            "transform".to_string(),
+            format!("translate({},{})", translate_x, translate_y),
+        ),
     ]);
     svg.children.push(xmltree::XMLNode::Element(path));
 
@@ -115,21 +121,28 @@ fn insert_outline(svg: &mut Element, color: &str) {
 }
 
 fn insert_qr_content(svg: &mut Element, qr: &str) {
-    let qr_svg = Element::parse(qr.as_bytes()).expect("unable to parse SVG content from QR encoder");
+    let qr_svg =
+        Element::parse(qr.as_bytes()).expect("unable to parse SVG content from QR encoder");
 
-    let qr_width: f32 =  qr_svg.attributes.get("width")
+    let qr_width: f32 = qr_svg
+        .attributes
+        .get("width")
         .expect("unable to determine SVG content width")
         .parse()
         .expect("unable to parse SVG content width as number");
 
-    let qr_height: f32 =  qr_svg.attributes.get("height")
+    let qr_height: f32 = qr_svg
+        .attributes
+        .get("height")
         .expect("unable to determine SVG content height")
         .parse()
         .expect("unable to parse SVG content height as number");
 
-    let qr_path = qr_svg.get_child("path")
+    let qr_path = qr_svg
+        .get_child("path")
         .expect("QR code does not have path element")
-        .attributes.get("d")
+        .attributes
+        .get("d")
         .expect("unable to find d attribute within QR code");
 
     let translate_x = (CONTAINER_WIDTH / 2.0) - (qr_width / 2.0);
@@ -138,7 +151,10 @@ fn insert_qr_content(svg: &mut Element, qr: &str) {
     let mut path = Element::new("path");
     path.attributes = HashMap::from([
         ("d".to_string(), qr_path.clone()),
-        ("transform".to_string(), format!("translate({},{})", translate_x, translate_y)),
+        (
+            "transform".to_string(),
+            format!("translate({},{})", translate_x, translate_y),
+        ),
     ]);
     svg.children.push(xmltree::XMLNode::Element(path));
 }
@@ -146,20 +162,28 @@ fn insert_qr_content(svg: &mut Element, qr: &str) {
 fn create_empty_svg() -> Element {
     let mut final_svg = Element::new("svg");
     final_svg.attributes = HashMap::from([
-        ("xmlns".to_string(), "http://www.w3.org/2000/svg".to_string()),
+        (
+            "xmlns".to_string(),
+            "http://www.w3.org/2000/svg".to_string(),
+        ),
         ("width".to_string(), format!("{}", CONTAINER_WIDTH)),
         ("height".to_string(), format!("{}", CONTAINER_HEIGHT)),
-        ("viewBox".to_string(), format!("0 0 {} {}", CONTAINER_WIDTH, CONTAINER_HEIGHT)),
+        (
+            "viewBox".to_string(),
+            format!("0 0 {} {}", CONTAINER_WIDTH, CONTAINER_HEIGHT),
+        ),
     ]);
     final_svg
 }
 
 pub fn create_pay_svg(content: &str, theme: Theme) -> Vec<u8> {
-    let code = QrCode::new(content.as_bytes()).expect("unable to create QR code");
+    let code = QrCode::with_error_correction_level(content.as_bytes(), EcLevel::L)
+        .expect("unable to create QR code");
 
     let qr_size = (CONTAINER_WIDTH - 12.0) as u32;
 
-    let svg_image = code.render::<svg::Color>()
+    let svg_image = code
+        .render::<svg::Color>()
         .max_dimensions(qr_size, qr_size)
         .quiet_zone(false)
         .build();
@@ -173,14 +197,14 @@ pub fn create_pay_svg(content: &str, theme: Theme) -> Vec<u8> {
     insert_pay_text(&mut svg, &theme.pay_text_color);
 
     let mut qr = Vec::new();
-    let emitter_options = EmitterConfig::default()
-        .write_document_declaration(false);
-    svg.write_with_config(&mut qr, emitter_options).expect("unable to write generated SVG. possible XML corruption");
+    let emitter_options = EmitterConfig::default().write_document_declaration(false);
+    svg.write_with_config(&mut qr, emitter_options)
+        .expect("unable to write generated SVG. possible XML corruption");
     qr
 }
 
-pub fn map_svg(svg: &Vec<u8>, size: u32) -> Pixmap {
-    let svg_tree = Tree::from_data(&svg, &Options::default()).unwrap();
+pub fn map_svg(svg: &[u8], size: u32) -> Pixmap {
+    let svg_tree = Tree::from_data(svg, &Options::default()).unwrap();
 
     let scale: f32 = size as f32 / CONTAINER_WIDTH;
 
@@ -191,24 +215,24 @@ pub fn map_svg(svg: &Vec<u8>, size: u32) -> Pixmap {
     resvg::render(
         &svg_tree,
         Transform::from_scale(scale, scale),
-        &mut pixmap.as_mut()
+        &mut pixmap.as_mut(),
     );
     pixmap
 }
 
-pub fn render_png(svg: &Vec<u8>, size: u32) -> Vec<u8> {
+pub fn render_png(svg: &[u8], size: u32) -> Vec<u8> {
     let pixmap = map_svg(svg, size);
 
     pixmap.encode_png().expect("unable to save image")
 }
 
-pub fn to_base64_png(svg: &Vec<u8>, size: u32) -> String {
+pub fn to_base64_png(svg: &[u8], size: u32) -> String {
     let buf = render_png(svg, size);
     let base64_content = base64::engine::general_purpose::STANDARD.encode(&buf);
     format!("data:image/png;base64,{}", base64_content)
 }
 
-pub fn render_jpeg(svg: &Vec<u8>, size: u32, quality: u8) -> Vec<u8> {
+pub fn render_jpeg(svg: &[u8], size: u32, quality: u8) -> Vec<u8> {
     let pixmap = map_svg(svg, size);
     let (width, height) = (pixmap.width(), pixmap.height());
     let mut buf = Vec::with_capacity((width * height * 3) as usize);
@@ -221,11 +245,14 @@ pub fn render_jpeg(svg: &Vec<u8>, size: u32, quality: u8) -> Vec<u8> {
 
     let mut jpeg_buffer = Vec::new();
     let encoder = Encoder::new(&mut jpeg_buffer, quality);
-    encoder.encode(&buf, width as u16, height as u16, ColorType::Rgb).ok().unwrap();
+    encoder
+        .encode(&buf, width as u16, height as u16, ColorType::Rgb)
+        .ok()
+        .unwrap();
     jpeg_buffer
 }
 
-pub fn to_base64_jpeg(svg: &Vec<u8>, size: u32, quality: u8) -> String {
+pub fn to_base64_jpeg(svg: &[u8], size: u32, quality: u8) -> String {
     let buf = render_jpeg(svg, size, quality);
     let content = base64::engine::general_purpose::STANDARD.encode(&buf);
     format!("data:image/jpeg;base64,{}", content)

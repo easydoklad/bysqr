@@ -1,6 +1,6 @@
 # bysqr
 
-Open source Pay by Square encoder written in Rust.
+Open source PAY by square encoder written in Rust.
 
 ## Notice
 
@@ -8,8 +8,8 @@ Work on the project is still in progress. It is not suitable for a production ru
 all features are implemented. Current version is very rough proof of concept. 
 It is very likely there will be breaking changes until 1.0, before settling on some stable API.
 
-The goal of the project is to provide full encoder and decoder implementation for Pay by Square and Invoice by Square,
-without any external dependencies and to be as much portable as possible, to allow compilation for various targets.
+The goal of the project is to provide full encoder and decoder implementations for PAY by square and Invoice by square,
+without relying on external services and with enough portability to compile for various targets.
 
 ## Installation
 
@@ -23,7 +23,8 @@ any GUI related features, such as QR code preview. It's size is however much sma
 
 ## Usage
 
-You can use `bysqr` binary to encode and decode QR codes. Currently only Pay encoding is supported.
+You can use the `bysqr` binary to encode QR codes. Currently PAY payment-order encoding is supported;
+standing orders, direct debits, and decoding are still in progress.
 
 ### Encoding to QR code
 
@@ -35,8 +36,11 @@ bysqr encode --src payment.xml --save ~/Desktop/qr.svg
 bysqr encode --src '<?xml version="1.0"?><Pay type="Pay">...</Pay>' --save ~/Desktop/qr.svg
 ```
 
-Provided source (`--src`) must be a valid Pay by Square or Invoice by Square XML structure. You can either pass a path to the XML file
+Provided source (`--src`) must be a valid PAY by square XML structure. You can either pass a path to the XML file
 or directly provide an XML content.
+
+JSON with the same PascalCase field names is also accepted. Amounts are kept as exact decimals, so values such as
+`12.345678` are not rounded through floating-point arithmetic.
 
 To save generated QR code as image, use `--save` option with path where to save the image. Type of the file is
 determined by the output file extension. We support generating `svg`, `png` and `jpeg` images.
@@ -94,6 +98,37 @@ cargo build --release
 
 You can find `bysqrcli` executable and rust library in `target/release`.
 
+## Rust API
+
+Both deserialization and encoding return typed errors:
+
+```rust
+use bysqr::{encoder, models::try_deserialize_pay};
+
+let pay = try_deserialize_pay(include_str!("payment.xml"))?;
+let payload = encoder::encode(&pay)?;
+# Ok::<(), bysqr::error::Error>(())
+```
+
+`encoder::encode_sequence` exposes the uncompressed tab-delimited form for
+conformance tooling. `codec::decode_payload` validates and inspects an encoded
+envelope, including its header, LZMA data, declared two-byte size, CRC32, and
+UTF-8 sequence. It is not yet the promised high-level PAY model decoder.
+
+## Tests
+
+Run the complete suite with:
+
+```shell
+cargo test --all-features
+```
+
+Offline fixtures under `tests/fixtures/pay` include known-good PAY by square
+payloads and cases derived from `spec/bysquare.xsd`. Tests compare decoded data
+instead of compressed strings because different LZMA streams can represent the
+same valid payload. No external service or PNG scanning is required during
+tests.
+
 ### WASM build
 
 `bysqr` can be built for Web Assembly target, which allows you to run encoder and decoder in the browser, without need for a server.
@@ -139,12 +174,13 @@ llvm-config --version
 
 ## Roadmap to v1.0
 
-- [x] Pay encoder
-- [ ] Pay decoder
+- [x] PAY payment-order encoder
+- [ ] PAY standing-order and direct-debit encoder
+- [ ] PAY decoder
 - [ ] Invoice encoder
 - [ ] Invoice decoder
 - [ ] alternative JSON input and output structure
 - [ ] theming
 - [ ] support for different logo position
 - [ ] general code refactoring
-- [ ] tests
+- [x] PAY encoder conformance tests

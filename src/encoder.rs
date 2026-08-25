@@ -1,247 +1,284 @@
-use std::io::Write;
-
 use chrono::NaiveDate;
-use crc32fast::Hasher;
-use regex::Regex;
-use liblzma::stream::{LzmaOptions, Stream};
-use liblzma::write::XzEncoder;
 
-use crate::models::{BankAccount, Pay, Payment};
+use crate::{
+    codec::{self, Header},
+    error::{Error, Result},
+    models::{BankAccount, Pay, Payment},
+};
 
-fn as_pattern_str(value: &Option<String>, pattern: &str, description: &str) -> String {
-    if let Some(val) = value {
-        if Regex::new(pattern).unwrap().is_match(val) {
-            val.clone()
-        } else {
-            panic!("Encoding error: The {} does not match pattern {}", description, pattern);
-        }
-    } else {
-        String::new()
-    }
+pub const MAX_SEQUENCE_CHARACTERS: usize = 550;
+
+/// Encode a PAY by square document into its Base32hex QR payload.
+pub fn encode(pay: &Pay) -> Result<String> {
+    codec::encode_payload(Header::PAY, &encode_sequence(pay)?)
 }
 
-fn as_valid_date(value: &String) -> String {
-    if Regex::new(r"\d{4}-\d{2}-\d{2}").unwrap().is_match(value) {
-        if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
-            date.format("%Y%m%d").to_string()
-        } else {
-            panic!("Encoding error: The date is not valid {}", value)
-        }
-    } else if Regex::new(r"\d{4}\d{2}\d{2}").unwrap().is_match(value) {
-        if let Ok(_) = NaiveDate::parse_from_str(value, "%Y%m%d") {
-            value.clone()
-        } else {
-            panic!("Encoding error: The date is not valid {}", value)
-        }
-    } else {
-        panic!("Encoding error: Invalid date format {}", value)
+/// Serialize a PAY document into the tab-delimited sequence defined by the
+/// by-square specification.
+///
+/// This is public mainly to make conformance testing and integrations that
+/// inspect the uncompressed data straightforward.
+pub fn encode_sequence(pay: &Pay) -> Result<String> {
+    let payments = &pay.payments.payment;
+    if payments.is_empty() {
+        return Err(Error::invalid(
+            "Payments",
+            "must contain at least one Payment",
+        ));
     }
+
+    let mut fields = Vec::new();
+    fields.push(optional_text("InvoiceID", pay.invoice_id.as_deref(), 10)?);
+    fields.push(payments.len().to_string());
+
+    // Appendix E of the specification places every beneficiary tuple after
+    // the core data of every payment, rather than inside each payment.
+    for payment in payments {
+        append_payment_core(&mut fields, payment)?;
+    }
+    for payment in payments {
+        fields.push(optional_text(
+            "BeneficiaryName",
+            payment.beneficiary_name.as_deref(),
+            140,
+        )?);
+        fields.push(optional_text(
+            "BeneficiaryAddressLine1",
+            payment.beneficiary_address_line1.as_deref(),
+            70,
+        )?);
+        fields.push(optional_text(
+            "BeneficiaryAddressLine2",
+            payment.beneficiary_address_line2.as_deref(),
+            70,
+        )?);
+    }
+
+    let sequence = fields.join("\t");
+    let character_count = sequence.chars().count();
+    if character_count > MAX_SEQUENCE_CHARACTERS {
+        return Err(Error::SequenceTooLong {
+            actual: character_count,
+            maximum: MAX_SEQUENCE_CHARACTERS,
+        });
+    }
+
+    Ok(sequence)
 }
 
-fn as_decimal_str(decimal: f32) -> String {
-    let as_str = format!("{:.2}", decimal);
+fn append_payment_core(fields: &mut Vec<String>, payment: &Payment) -> Result<()> {
+    let options = payment_options_classifier(&payment.payment_options)?;
+    let has_standing_order = options & 2 != 0;
+    let has_direct_debit = options & 4 != 0;
 
-    if let Some(_) = as_str.find('.') {
-        let mut truncated = as_str;
-
-        while truncated.ends_with('0') {
-            truncated.pop();
-        }
-
-        if truncated.ends_with('.') {
-            truncated.pop();
-        }
-
-        truncated
-    } else {
-        as_str
+    if has_standing_order || payment.standing_order_ext.is_some() {
+        return Err(Error::Unsupported(
+            "standing-order encoding is not implemented yet".to_owned(),
+        ));
     }
+    if has_direct_debit || payment.direct_debit_ext.is_some() {
+        return Err(Error::Unsupported(
+            "direct-debit encoding is not implemented yet".to_owned(),
+        ));
+    }
+
+    fields.push(options.to_string());
+
+    let amount = match &payment.amount {
+        None => String::new(),
+        Some(amount) if amount.is_zero() => {
+            return Err(Error::invalid("Amount", "must be greater than zero"));
+        }
+        Some(amount) if amount.as_str().chars().count() > 15 => {
+            return Err(Error::invalid(
+                "Amount",
+                "must contain no more than 15 characters",
+            ));
+        }
+        Some(amount) => amount.to_string(),
+    };
+    fields.push(amount);
+
+    let currency = sanitized(&payment.currency_code);
+    if currency.len() != 3 || !currency.bytes().all(|byte| byte.is_ascii_uppercase()) {
+        return Err(Error::invalid(
+            "CurrencyCode",
+            "must contain exactly three ASCII uppercase letters",
+        ));
+    }
+    fields.push(currency);
+
+    fields.push(match payment.payment_due_date.as_deref() {
+        Some(value) => valid_date(value)?,
+        None => String::new(),
+    });
+
+    let has_symbols = payment.variable_symbol.is_some()
+        || payment.constant_symbol.is_some()
+        || payment.specific_symbol.is_some();
+    if has_symbols && payment.originators_reference_information.is_some() {
+        return Err(Error::invalid(
+            "payment reference",
+            "OriginatorsReferenceInformation cannot be combined with payment symbols",
+        ));
+    }
+
+    fields.push(optional_digits(
+        "VariableSymbol",
+        payment.variable_symbol.as_deref(),
+        10,
+    )?);
+    fields.push(optional_digits(
+        "ConstantSymbol",
+        payment.constant_symbol.as_deref(),
+        4,
+    )?);
+    fields.push(optional_digits(
+        "SpecificSymbol",
+        payment.specific_symbol.as_deref(),
+        10,
+    )?);
+    fields.push(optional_text(
+        "OriginatorsReferenceInformation",
+        payment.originators_reference_information.as_deref(),
+        35,
+    )?);
+    fields.push(optional_text(
+        "PaymentNote",
+        payment.payment_note.as_deref(),
+        140,
+    )?);
+
+    let accounts = &payment.bank_accounts.bank_account;
+    if accounts.is_empty() {
+        return Err(Error::invalid(
+            "BankAccounts",
+            "must contain at least one BankAccount",
+        ));
+    }
+    fields.push(accounts.len().to_string());
+    for account in accounts {
+        append_bank_account(fields, account)?;
+    }
+
+    // Optional complex values are represented by a zero/one occurrence count.
+    fields.push("0".to_owned());
+    fields.push("0".to_owned());
+
+    Ok(())
 }
 
-fn bank_account_to_seq(bank_account: &BankAccount) -> Vec<String> {
-    let mut seq: Vec<String> = Vec::new();
-
-    // IBAN = order 1
-    if Regex::new(r"^[A-Z]{2}\d{2}[A-Z\d]{0,30}$").unwrap().is_match(&bank_account.iban) {
-        seq.push(bank_account.iban.clone())
-    } else {
-        panic!("Encoding error: IBAN does not have valid format")
+fn append_bank_account(fields: &mut Vec<String>, account: &BankAccount) -> Result<()> {
+    let iban = sanitized(&account.iban);
+    let bytes = iban.as_bytes();
+    let valid_iban = (4..=34).contains(&bytes.len())
+        && bytes[..2].iter().all(u8::is_ascii_uppercase)
+        && bytes[2..4].iter().all(u8::is_ascii_digit)
+        && bytes[4..]
+            .iter()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit());
+    if !valid_iban {
+        return Err(Error::invalid(
+            "IBAN",
+            "must match [A-Z]{2}[0-9]{2}[A-Z0-9]{0,30}",
+        ));
     }
+    fields.push(iban);
 
-    // BIC = order 2
-    seq.push(as_pattern_str(&bank_account.bic, r"^[A-Z]{4}[A-Z]{2}[A-Z\d]{2}([A-Z\d]{3})?$", "BIC"));
-
-    seq
-}
-
-/// Convert Payment to sequence.
-fn payment_to_seq(payment: &Payment) -> Vec<String> {
-    let mut seq: Vec<String> = Vec::new();
-
-    // PaymentOptions = order 1
-    if payment.payment_options == "paymentorder" {
-        seq.push(String::from("1"));
-    } else if payment.payment_options == "standingorder" {
-        seq.push(String::from("2"));
-    } else if payment.payment_options == "directdebit" {
-        seq.push(String::from("4"));
-    } else {
-        panic!("Encoding error: Unkown PaymentOptions value {}", payment.payment_options);
-    }
-
-    // Amount = order 2
-    match payment.amount {
-        None => {
-            seq.push(String::new());
-        }
+    let bic = match account.bic.as_deref() {
+        None => String::new(),
         Some(value) => {
-            if ! value.is_sign_positive() {
-                panic!("Encoding error: The amount must be a positive number")
+            let value = sanitized(value);
+            let bytes = value.as_bytes();
+            let valid_bic = matches!(bytes.len(), 8 | 11)
+                && bytes[..6].iter().all(u8::is_ascii_uppercase)
+                && bytes[6..]
+                    .iter()
+                    .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit());
+            if !valid_bic {
+                return Err(Error::invalid(
+                    "BIC",
+                    "must match [A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?",
+                ));
             }
-
-            seq.push(as_decimal_str(value));
+            value
         }
-    }
+    };
+    fields.push(bic);
 
-    // Currency = order 3
-    if Regex::new("[A-Z]{3}").unwrap().is_match(&payment.currency_code) {
-        seq.push(payment.currency_code.clone());
-    } else {
-        panic!("Encoding error: The currency code is not in ISO 4217 format");
-    }
-
-    // Payment due date = order 4
-    if let Some(due_date) = &payment.payment_due_date {
-        seq.push(as_valid_date(due_date));
-    } else {
-        seq.push(String::new());
-    }
-
-    // Variable Symbol = order 5
-    seq.push(as_pattern_str(&payment.variable_symbol, r"^\d{0,10}$", "variable symbol"));
-
-    // Constant Symbol = order 6
-    seq.push(as_pattern_str(&payment.constant_symbol, r"^\d{0,4}$", "constant symbol"));
-
-    // Specific Symbol = order 7
-    seq.push(as_pattern_str(&payment.specific_symbol, r"^\d{0,10}$", "specific symbol"));
-
-    // Originators Reference Information = order 8
-    seq.push(as_pattern_str(&payment.originators_reference_information, r"^.{0,35}$", "originators reference information"));
-
-    // Payment Note = order 9
-    seq.push(as_pattern_str(&payment.payment_note, r"^[\p{L}\p{N}\p{P}\p{Z}\p{M}]{1,140}$", "payment note"));
-
-    // Bank Accounts = order 10
-    seq.push(format!("{}", payment.bank_accounts.bank_account.len()));
-    for bank_account in &payment.bank_accounts.bank_account {
-        seq.append(&mut bank_account_to_seq(bank_account));
-    }
-
-    // TODO: 11 StandingOrderExt
-    seq.push(String::from("0"));
-
-    // TODO: 12 DirectDebitExt
-    seq.push(String::from("0"));
-
-    // Beneficiary Name = order 13
-    seq.push(as_pattern_str(&payment.beneficiary_name, r"^.{0,140}$", "beneficiary name"));
-
-    // Beneficiary Address Line 1 = order 14
-    seq.push(as_pattern_str(&payment.beneficiary_address_line_1, r"^.{0,70}$", "beneficiary address line 1"));
-
-    // Beneficiary Address Line 2 = order 15
-    seq.push(as_pattern_str(&payment.beneficiary_address_line_2, r"^.{0,70}$", "beneficiary address line 2"));
-
-    seq
+    Ok(())
 }
 
-fn base32_encode(bytes: &[u8]) -> String {
-    let mut result = String::new();
+fn payment_options_classifier(value: &str) -> Result<u8> {
+    let mut classifier = 0_u8;
+    let mut found = false;
 
-    let table: [char; 32] = [
-        '0', '1', '2', '3', '4', '5', '6', '7',
-        '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
-        'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
-        'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
-    ];
-
-    for &byte in bytes {
-        result.push(table[byte as usize]);
+    for option in value.split_whitespace() {
+        found = true;
+        classifier |= match option {
+            "paymentorder" => 1,
+            "standingorder" => 2,
+            "directdebit" => 4,
+            _ => {
+                return Err(Error::invalid(
+                    "PaymentOptions",
+                    format!("unknown option {option:?}"),
+                ));
+            }
+        };
     }
 
-    result
+    if !found {
+        return Err(Error::invalid(
+            "PaymentOptions",
+            "must contain at least one option",
+        ));
+    }
+
+    Ok(classifier)
 }
 
-// TODO: ak obsahuje hodnota \t tak musi to byť vymenene za space char
-pub fn encode(pay: &Pay) -> String {
-    let mut buf: Vec<String> = Vec::new();
+fn valid_date(value: &str) -> Result<String> {
+    let value = sanitized(value);
+    let parsed = match value.len() {
+        8 => NaiveDate::parse_from_str(&value, "%Y%m%d"),
+        10 => NaiveDate::parse_from_str(&value, "%Y-%m-%d"),
+        _ => {
+            return Err(Error::invalid(
+                "PaymentDueDate",
+                "must use YYYY-MM-DD or YYYYMMDD format",
+            ));
+        }
+    };
 
-    buf.push(format!("{}", pay.payments.payment.len()));
+    parsed
+        .map(|date| date.format("%Y%m%d").to_string())
+        .map_err(|_| Error::invalid("PaymentDueDate", format!("{value:?} is not a valid date")))
+}
 
-    for payment in &pay.payments.payment {
-        let mut encoded = payment_to_seq(&payment);
-
-        buf.append(&mut encoded);
+fn optional_digits(field: &'static str, value: Option<&str>, maximum: usize) -> Result<String> {
+    let value = optional_text(field, value, maximum)?;
+    if !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error::invalid(
+            field,
+            format!("must contain at most {maximum} ASCII digits"),
+        ));
     }
+    Ok(value)
+}
 
-    let seq = format!("\t{}", buf.join("\t"));
-
-    let mut hasher = Hasher::new();
-    hasher.update(seq.as_bytes());
-    let crc = hasher.finalize();
-
-    let mut to_compress: Vec<u8> = Vec::from(crc.to_le_bytes());
-    to_compress.extend_from_slice(seq.as_bytes());
-
-    let mut options = LzmaOptions::new_preset(6).unwrap();
-    options.literal_context_bits(3);
-    options.literal_position_bits(0);
-    options.position_bits(2);
-    options.dict_size(131072);
-
-    let stream = Stream::new_lzma_encoder(&options).unwrap();
-
-    let mut compressor = XzEncoder::new_stream(Vec::new(), stream);
-    compressor.write_all(&to_compress).unwrap();
-
-    let compressed = &compressor.finish().unwrap()[13..];
-
-    let square_type: u16 = 0;
-    let version: u16 = 0;
-    let document_type: u16 = 0;
-    let reserved: u16 = 0;
-
-    // TODO: Check či maju byt le alebo be tieto bity
-    let header = ((square_type & 0b1111) << 12 | (version & 0b1111) << 8 | (document_type & 0b1111) << 4 | reserved & 0b1111).to_le_bytes();
-
-    let mut payload: Vec<u8> = Vec::new();
-    payload.extend_from_slice(&header);
-    // TODO: Velkost paylodu pred kompresiou je potrebna?
-    payload.extend_from_slice(&((to_compress.len() & 0b11111111) as u16).to_le_bytes());
-    payload.extend_from_slice(&compressed);
-
-    let mut payload_bin: String = payload
-        .iter()
-        .map(|byte| format!("{:08b}", byte))
-        .collect::<Vec<String>>()
-        .join("");
-
-    let trailing = payload_bin.len() % 5;
-    if trailing > 0 {
-        payload_bin.push_str(&std::iter::repeat('0').take(5 - trailing).collect::<String>());
+fn optional_text(field: &'static str, value: Option<&str>, maximum: usize) -> Result<String> {
+    let value = value.map(sanitized).unwrap_or_default();
+    let actual = value.chars().count();
+    if actual > maximum {
+        return Err(Error::invalid(
+            field,
+            format!("contains {actual} characters; the maximum is {maximum}"),
+        ));
     }
+    Ok(value)
+}
 
-    let base_5: Vec<u8> = payload_bin
-        .chars()
-        .collect::<Vec<_>>()
-        .chunks(5)
-        .map(|chunk| {
-            let str_val: String = chunk.iter().collect();
-
-            u8::from_str_radix(&str_val, 2).unwrap()
-        })
-        .collect();
-
-    base32_encode(&base_5)
+fn sanitized(value: &str) -> String {
+    value.replace('\t', " ")
 }

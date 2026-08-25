@@ -1,0 +1,6 @@
+{
+  "name": "valid basic payment order",
+  "source": "<?xml version=\"1.0\"?>\n<Pay type=\"Pay\">\n  <Payments>\n    <Payment>\n      <BankAccounts><BankAccount><IBAN>SK7700000000000000000000</IBAN></BankAccount></BankAccounts>\n      <Amount>12.34</Amount><CurrencyCode>EUR</CurrencyCode>\n      <BeneficiaryName>Fixture Test</BeneficiaryName>\n      <VariableSymbol>20260825</VariableSymbol>\n      <PaymentNote>bysqr Rust fixture</PaymentNote>\n      <PaymentOptions>paymentorder</PaymentOptions>\n    </Payment>\n  </Payments>\n</Pay>",
+  "payload": "000620000OTQ8GD9P3146TKTM0EOR8GS6MCNQU8Q6DBV3A4QK1JTORU2PBR6CBS3SL85PJRVSIR8RE49VEGTF5JRTM45DTL9US038PVH5GCIC1483NLI0MGU6FF0KB8",
+  "expected_sequence": "\t1\t1\t12.34\tEUR\t\t20260825\t\t\t\tbysqr Rust fixture\t1\tSK7700000000000000000000\t\t0\t0\tFixture Test\t\t"
+}
