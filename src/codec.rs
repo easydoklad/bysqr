@@ -1,5 +1,5 @@
 use crc32fast::Hasher;
-use liblzma::stream::{Action, Filters, LzmaOptions, Stream};
+use liblzma::stream::{Action, Filters, LzmaOptions, Status, Stream};
 use liblzma::write::XzEncoder;
 use std::io::Write;
 
@@ -162,9 +162,19 @@ fn decompress(input: &[u8], expected_length: usize) -> Result<Vec<u8>> {
     // cannot be accepted merely because the output buffer filled up.
     let mut output = vec![0; expected_length + 1];
 
-    stream
+    let status = stream
         .process(input, &mut output, Action::Run)
         .map_err(|error| Error::Compression(format!("{error:?}")))?;
+
+    let consumed = usize::try_from(stream.total_in()).map_err(|_| {
+        Error::InvalidPayload("compressed input length does not fit usize".to_owned())
+    })?;
+    if status == Status::StreamEnd && consumed != input.len() {
+        return Err(Error::InvalidPayload(format!(
+            "compressed stream contains {} trailing bytes",
+            input.len() - consumed
+        )));
+    }
 
     let actual_length = usize::try_from(stream.total_out()).map_err(|_| {
         Error::InvalidPayload("decompressed output length does not fit usize".to_owned())
@@ -239,7 +249,10 @@ fn base32hex_decode(input: &str) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{base32hex_decode, base32hex_encode, decode_payload, encode_payload, Header};
+    use super::{
+        base32hex_decode, base32hex_encode, compress, decode_payload, encode_payload, Header,
+    };
+    use crate::error::Error;
 
     #[test]
     fn base32hex_round_trip() {
@@ -256,5 +269,47 @@ mod tests {
 
         assert_eq!(decoded.header, Header::PAY);
         assert_eq!(decoded.sequence, sequence);
+    }
+
+    #[test]
+    fn rejects_checksum_mismatch() {
+        let sequence = b"\t1\t1\t12.34\tEUR";
+        let mut uncompressed = vec![0, 0, 0, 0];
+        uncompressed.extend_from_slice(sequence);
+
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&Header::PAY.to_bytes().unwrap());
+        payload.extend_from_slice(&(uncompressed.len() as u16).to_le_bytes());
+        payload.extend_from_slice(&compress(&uncompressed).unwrap());
+
+        assert!(matches!(
+            decode_payload(&base32hex_encode(&payload)),
+            Err(Error::ChecksumMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_incorrect_declared_length() {
+        let encoded = encode_payload(Header::PAY, "\t1\t1\t12.34\tEUR").unwrap();
+        let mut payload = base32hex_decode(&encoded).unwrap();
+        let length = u16::from_le_bytes([payload[2], payload[3]]);
+        payload[2..4].copy_from_slice(&(length - 1).to_le_bytes());
+
+        assert!(matches!(
+            decode_payload(&base32hex_encode(&payload)),
+            Err(Error::InvalidPayload(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_trailing_compressed_data() {
+        let encoded = encode_payload(Header::PAY, "\t1\t1\t12.34\tEUR").unwrap();
+        let mut payload = base32hex_decode(&encoded).unwrap();
+        payload.push(0);
+
+        assert!(matches!(
+            decode_payload(&base32hex_encode(&payload)),
+            Err(Error::InvalidPayload(_))
+        ));
     }
 }
