@@ -56,6 +56,16 @@ fn xsd_derived_standing_order_fixture() {
 }
 
 #[test]
+fn xsd_derived_sepa_direct_debit_fixture() {
+    assert_sequence_fixture(include_str!("fixtures/pay/xsd-direct-debit-sepa.json"));
+}
+
+#[test]
+fn xsd_derived_other_direct_debit_fixture() {
+    assert_sequence_fixture(include_str!("fixtures/pay/xsd-direct-debit-other.json"));
+}
+
+#[test]
 fn tabs_in_values_are_replaced_with_spaces() {
     let source = pay_with(vec![minimal_payment(json!({
         "PaymentNote": "left\tright",
@@ -140,23 +150,6 @@ fn rejects_empty_and_oversized_payment_collections() {
         encoder::encode(&oversized),
         Err(Error::SequenceTooLong { .. })
     ));
-}
-
-#[test]
-fn reports_unimplemented_payment_extensions() {
-    let source = pay_with(vec![minimal_payment(json!({
-        "PaymentOptions": "paymentorder directdebit",
-        "DirectDebitExt": {
-            "DirectDebitScheme": "SEPA",
-            "DirectDebitType": "recurrent",
-            "MandateID": "MANDATE-1",
-            "CreditorID": "CREDITOR-1",
-            "ContractID": "CONTRACT-1"
-        }
-    }))]);
-    let pay = try_deserialize_pay(&source.to_string()).unwrap();
-
-    assert!(matches!(encoder::encode(&pay), Err(Error::Unsupported(_))));
 }
 
 #[test]
@@ -248,4 +241,118 @@ fn accepts_weekly_day_and_month_selection() {
 
     assert_eq!(fields[2], "3");
     assert_eq!(&fields[14..20], &["1", "7", "2049", "w", "", "0"]);
+}
+
+#[test]
+fn validates_direct_debit_option_and_extension_pair() {
+    let missing_extension = pay_with(vec![minimal_payment(json!({
+        "PaymentOptions": "directdebit"
+    }))]);
+    let pay = try_deserialize_pay(&missing_extension.to_string()).unwrap();
+    assert!(matches!(
+        encoder::encode(&pay),
+        Err(Error::InvalidInput {
+            field: "DirectDebitExt",
+            ..
+        })
+    ));
+
+    let missing_option = pay_with(vec![minimal_payment(json!({
+        "DirectDebitExt": {
+            "DirectDebitScheme": "other",
+            "DirectDebitType": "one-off"
+        }
+    }))]);
+    let pay = try_deserialize_pay(&missing_option.to_string()).unwrap();
+    assert!(matches!(
+        encoder::encode(&pay),
+        Err(Error::InvalidInput {
+            field: "PaymentOptions",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn validates_direct_debit_reference_choice() {
+    let cases = [
+        (
+            "mixed other references",
+            json!({
+                "DirectDebitScheme": "other",
+                "DirectDebitType": "one-off",
+                "VariableSymbol": "1",
+                "OriginatorsReferenceInformation": "RF00"
+            }),
+        ),
+        (
+            "missing SEPA identifiers",
+            json!({
+                "DirectDebitScheme": "SEPA",
+                "DirectDebitType": "recurrent"
+            }),
+        ),
+        (
+            "other with SEPA identifiers",
+            json!({
+                "DirectDebitScheme": "other",
+                "DirectDebitType": "recurrent",
+                "MandateID": "MANDATE-1",
+                "CreditorID": "CREDITOR-1"
+            }),
+        ),
+        (
+            "zero maximum",
+            json!({
+                "DirectDebitScheme": "other",
+                "DirectDebitType": "recurrent",
+                "MaxAmount": "0"
+            }),
+        ),
+        (
+            "invalid validity date",
+            json!({
+                "DirectDebitScheme": "other",
+                "DirectDebitType": "recurrent",
+                "ValidTillDate": "not-a-date"
+            }),
+        ),
+    ];
+
+    for (name, extension) in cases {
+        let source = pay_with(vec![minimal_payment(json!({
+            "PaymentOptions": "directdebit",
+            "DirectDebitExt": extension
+        }))]);
+        let pay = try_deserialize_pay(&source.to_string()).unwrap();
+        assert!(
+            matches!(encoder::encode(&pay), Err(Error::InvalidInput { .. })),
+            "{name} was accepted"
+        );
+    }
+}
+
+#[test]
+fn combines_standing_order_and_direct_debit_extensions() {
+    let source = pay_with(vec![minimal_payment(json!({
+        "PaymentOptions": "paymentorder standingorder directdebit",
+        "StandingOrderExt": {
+            "Periodicity": "Daily"
+        },
+        "DirectDebitExt": {
+            "DirectDebitScheme": "other",
+            "DirectDebitType": "recurrent",
+            "OriginatorsReferenceInformation": "RF18539007547034"
+        }
+    }))]);
+    let pay = try_deserialize_pay(&source.to_string()).unwrap();
+    let sequence = encoder::encode_sequence(&pay).unwrap();
+    let fields: Vec<_> = sequence.split('\t').collect();
+
+    assert_eq!(fields[2], "7");
+    assert_eq!(&fields[14..20], &["1", "", "", "d", "", "1"]);
+    assert_eq!(
+        &fields[20..30],
+        &["0", "1", "", "", "RF18539007547034", "", "", "", "", ""]
+    );
 }

@@ -443,24 +443,120 @@ impl fmt::Display for Months {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct DirectDebitExt {
-    pub direct_debit_scheme: String,
-    pub direct_debit_type: String,
+    pub direct_debit_scheme: DirectDebitScheme,
+    pub direct_debit_type: DirectDebitType,
     #[serde(default)]
     pub variable_symbol: Option<String>,
     #[serde(default)]
     pub specific_symbol: Option<String>,
     #[serde(default)]
     pub originators_reference_information: Option<String>,
-    #[serde(rename = "MandateID")]
-    pub mandate_id: String,
-    #[serde(rename = "CreditorID")]
-    pub creditor_id: String,
-    #[serde(rename = "ContractID")]
-    pub contract_id: String,
+    #[serde(default, rename = "MandateID")]
+    pub mandate_id: Option<String>,
+    #[serde(default, rename = "CreditorID")]
+    pub creditor_id: Option<String>,
+    #[serde(default, rename = "ContractID")]
+    pub contract_id: Option<String>,
     #[serde(default)]
     pub max_amount: Option<Amount>,
     #[serde(default)]
     pub valid_till_date: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
+#[serde(try_from = "String")]
+pub enum DirectDebitScheme {
+    Other,
+    Sepa,
+}
+
+impl DirectDebitScheme {
+    pub const fn classifier(self) -> u8 {
+        match self {
+            Self::Other => 0,
+            Self::Sepa => 1,
+        }
+    }
+}
+
+impl FromStr for DirectDebitScheme {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value {
+            "other" => Ok(Self::Other),
+            "SEPA" => Ok(Self::Sepa),
+            _ => Err(Error::invalid(
+                "DirectDebitScheme",
+                format!("unknown value {value:?}"),
+            )),
+        }
+    }
+}
+
+impl TryFrom<String> for DirectDebitScheme {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        value.parse()
+    }
+}
+
+impl fmt::Display for DirectDebitScheme {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Other => "other",
+            Self::Sepa => "SEPA",
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
+#[serde(try_from = "String")]
+pub enum DirectDebitType {
+    OneOff,
+    Recurrent,
+}
+
+impl DirectDebitType {
+    pub const fn classifier(self) -> u8 {
+        match self {
+            Self::OneOff => 0,
+            Self::Recurrent => 1,
+        }
+    }
+}
+
+impl FromStr for DirectDebitType {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value {
+            "one-off" => Ok(Self::OneOff),
+            "recurrent" => Ok(Self::Recurrent),
+            _ => Err(Error::invalid(
+                "DirectDebitType",
+                format!("unknown value {value:?}"),
+            )),
+        }
+    }
+}
+
+impl TryFrom<String> for DirectDebitType {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        value.parse()
+    }
+}
+
+impl fmt::Display for DirectDebitType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::OneOff => "one-off",
+            Self::Recurrent => "recurrent",
+        })
+    }
 }
 
 /// A decimal amount kept in its canonical string form.
@@ -667,8 +763,8 @@ fn normalize_number(value: &str, allow_exponent: bool) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_number, try_deserialize_pay, Amount, Month, Months, PaymentOption,
-        PaymentOptions, Periodicity,
+        normalize_number, try_deserialize_pay, Amount, DirectDebitScheme, DirectDebitType, Month,
+        Months, PaymentOption, PaymentOptions, Periodicity,
     };
 
     #[test]
@@ -745,5 +841,24 @@ mod tests {
         assert!(months.contains(Month::October));
         assert_eq!(months.to_string(), "January April July October");
         assert!("January January".parse::<Months>().is_err());
+    }
+
+    #[test]
+    fn maps_direct_debit_classifiers() {
+        assert_eq!(
+            "other".parse::<DirectDebitScheme>().unwrap().classifier(),
+            0
+        );
+        assert_eq!("SEPA".parse::<DirectDebitScheme>().unwrap().classifier(), 1);
+        assert_eq!(
+            "one-off".parse::<DirectDebitType>().unwrap().classifier(),
+            0
+        );
+        assert_eq!(
+            "recurrent".parse::<DirectDebitType>().unwrap().classifier(),
+            1
+        );
+        assert!("sepa".parse::<DirectDebitScheme>().is_err());
+        assert!("recurring".parse::<DirectDebitType>().is_err());
     }
 }

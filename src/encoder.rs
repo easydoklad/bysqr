@@ -3,7 +3,10 @@ use chrono::NaiveDate;
 use crate::{
     codec::{self, Header},
     error::{Error, Result},
-    models::{BankAccount, Pay, Payment, PaymentOption, Periodicity, StandingOrderExt},
+    models::{
+        Amount, BankAccount, DirectDebitExt, DirectDebitScheme, Pay, Payment, PaymentOption,
+        Periodicity, StandingOrderExt,
+    },
 };
 
 pub const MAX_SEQUENCE_CHARACTERS: usize = 550;
@@ -71,12 +74,6 @@ fn append_payment_core(fields: &mut Vec<String>, payment: &Payment) -> Result<()
     let has_standing_order = options.contains(PaymentOption::StandingOrder);
     let has_direct_debit = options.contains(PaymentOption::DirectDebit);
 
-    if has_direct_debit || payment.direct_debit_ext.is_some() {
-        return Err(Error::Unsupported(
-            "direct-debit encoding is not implemented yet".to_owned(),
-        ));
-    }
-
     let standing_order = match (has_standing_order, payment.standing_order_ext.as_ref()) {
         (false, None) => None,
         (true, Some(extension)) => Some(extension),
@@ -93,23 +90,26 @@ fn append_payment_core(fields: &mut Vec<String>, payment: &Payment) -> Result<()
             ));
         }
     };
+    let direct_debit = match (has_direct_debit, payment.direct_debit_ext.as_ref()) {
+        (false, None) => None,
+        (true, Some(extension)) => Some(extension),
+        (true, None) => {
+            return Err(Error::invalid(
+                "DirectDebitExt",
+                "is required when PaymentOptions contains directdebit",
+            ));
+        }
+        (false, Some(_)) => {
+            return Err(Error::invalid(
+                "PaymentOptions",
+                "must contain directdebit when DirectDebitExt is present",
+            ));
+        }
+    };
 
     fields.push(options.classifier().to_string());
 
-    let amount = match &payment.amount {
-        None => String::new(),
-        Some(amount) if amount.is_zero() => {
-            return Err(Error::invalid("Amount", "must be greater than zero"));
-        }
-        Some(amount) if amount.as_str().chars().count() > 15 => {
-            return Err(Error::invalid(
-                "Amount",
-                "must contain no more than 15 characters",
-            ));
-        }
-        Some(amount) => amount.to_string(),
-    };
-    fields.push(amount);
+    fields.push(optional_amount("Amount", payment.amount.as_ref(), true)?);
 
     let currency = sanitized(&payment.currency_code);
     if currency.len() != 3 || !currency.bytes().all(|byte| byte.is_ascii_uppercase()) {
@@ -174,9 +174,116 @@ fn append_payment_core(fields: &mut Vec<String>, payment: &Payment) -> Result<()
     }
 
     append_standing_order(fields, standing_order)?;
+    append_direct_debit(fields, direct_debit)?;
 
-    // DirectDebitExt remains absent until its encoder is implemented.
-    fields.push("0".to_owned());
+    Ok(())
+}
+
+fn append_direct_debit(
+    fields: &mut Vec<String>,
+    direct_debit: Option<&DirectDebitExt>,
+) -> Result<()> {
+    let Some(direct_debit) = direct_debit else {
+        fields.push("0".to_owned());
+        return Ok(());
+    };
+
+    let has_symbols =
+        direct_debit.variable_symbol.is_some() || direct_debit.specific_symbol.is_some();
+    let has_originator = direct_debit.originators_reference_information.is_some();
+    let has_sepa_identifiers = direct_debit.mandate_id.is_some()
+        || direct_debit.creditor_id.is_some()
+        || direct_debit.contract_id.is_some();
+
+    let reference_groups =
+        usize::from(has_symbols) + usize::from(has_originator) + usize::from(has_sepa_identifiers);
+    if reference_groups > 1 {
+        return Err(Error::invalid(
+            "DirectDebitExt reference",
+            "symbols, OriginatorsReferenceInformation, and SEPA identifiers are mutually exclusive",
+        ));
+    }
+
+    match direct_debit.direct_debit_scheme {
+        DirectDebitScheme::Sepa => {
+            if has_symbols || has_originator {
+                return Err(Error::invalid(
+                    "DirectDebitExt reference",
+                    "SEPA direct debit must use MandateID and CreditorID",
+                ));
+            }
+            if direct_debit.mandate_id.as_deref().is_none_or(str::is_empty)
+                || direct_debit
+                    .creditor_id
+                    .as_deref()
+                    .is_none_or(str::is_empty)
+            {
+                return Err(Error::invalid(
+                    "DirectDebitExt reference",
+                    "SEPA direct debit requires non-empty MandateID and CreditorID",
+                ));
+            }
+        }
+        DirectDebitScheme::Other if has_sepa_identifiers => {
+            return Err(Error::invalid(
+                "DirectDebitExt reference",
+                "the other scheme cannot use SEPA mandate, creditor, or contract identifiers",
+            ));
+        }
+        DirectDebitScheme::Other => {}
+    }
+
+    let variable_symbol = optional_digits(
+        "DirectDebitExt.VariableSymbol",
+        direct_debit.variable_symbol.as_deref(),
+        10,
+    )?;
+    let specific_symbol = optional_digits(
+        "DirectDebitExt.SpecificSymbol",
+        direct_debit.specific_symbol.as_deref(),
+        10,
+    )?;
+    let originator = optional_text(
+        "DirectDebitExt.OriginatorsReferenceInformation",
+        direct_debit.originators_reference_information.as_deref(),
+        35,
+    )?;
+    let mandate_id = optional_text(
+        "DirectDebitExt.MandateID",
+        direct_debit.mandate_id.as_deref(),
+        35,
+    )?;
+    let creditor_id = optional_text(
+        "DirectDebitExt.CreditorID",
+        direct_debit.creditor_id.as_deref(),
+        35,
+    )?;
+    let contract_id = optional_text(
+        "DirectDebitExt.ContractID",
+        direct_debit.contract_id.as_deref(),
+        35,
+    )?;
+    let max_amount = optional_amount(
+        "DirectDebitExt.MaxAmount",
+        direct_debit.max_amount.as_ref(),
+        true,
+    )?;
+    let valid_till_date = match direct_debit.valid_till_date.as_deref() {
+        Some(value) => valid_date("DirectDebitExt.ValidTillDate", value)?,
+        None => String::new(),
+    };
+
+    fields.push("1".to_owned());
+    fields.push(direct_debit.direct_debit_scheme.classifier().to_string());
+    fields.push(direct_debit.direct_debit_type.classifier().to_string());
+    fields.push(variable_symbol);
+    fields.push(specific_symbol);
+    fields.push(originator);
+    fields.push(mandate_id);
+    fields.push(creditor_id);
+    fields.push(contract_id);
+    fields.push(max_amount);
+    fields.push(valid_till_date);
 
     Ok(())
 }
@@ -306,6 +413,20 @@ fn optional_digits(field: &'static str, value: Option<&str>, maximum: usize) -> 
         ));
     }
     Ok(value)
+}
+
+fn optional_amount(field: &'static str, amount: Option<&Amount>, positive: bool) -> Result<String> {
+    match amount {
+        None => Ok(String::new()),
+        Some(amount) if positive && amount.is_zero() => {
+            Err(Error::invalid(field, "must be greater than zero"))
+        }
+        Some(amount) if amount.as_str().chars().count() > 15 => Err(Error::invalid(
+            field,
+            "must contain no more than 15 characters",
+        )),
+        Some(amount) => Ok(amount.to_string()),
+    }
 }
 
 fn optional_text(field: &'static str, value: Option<&str>, maximum: usize) -> Result<String> {

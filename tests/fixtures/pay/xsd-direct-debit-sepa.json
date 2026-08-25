@@ -1,0 +1,6 @@
+{
+  "name": "XSD-derived SEPA direct debit",
+  "schema": "spec/bysquare.xsd",
+  "source": "<?xml version=\"1.0\"?>\n<Pay type=\"Pay\">\n  <InvoiceID>DD-SEPA</InvoiceID>\n  <Payments>\n    <Payment>\n      <PaymentOptions>paymentorder directdebit</PaymentOptions>\n      <Amount>125.50</Amount>\n      <CurrencyCode>EUR</CurrencyCode>\n      <PaymentDueDate>2026-10-01</PaymentDueDate>\n      <PaymentNote>SEPA direct debit</PaymentNote>\n      <BankAccounts>\n        <BankAccount><IBAN>SK7700000000000000000000</IBAN></BankAccount>\n      </BankAccounts>\n      <DirectDebitExt>\n        <DirectDebitScheme>SEPA</DirectDebitScheme>\n        <DirectDebitType>recurrent</DirectDebitType>\n        <MandateID>MANDATE-42</MandateID>\n        <CreditorID>SK12ZZZ00000000001</CreditorID>\n        <ContractID>CONTRACT-42</ContractID>\n        <MaxAmount>250.75</MaxAmount>\n        <ValidTillDate>2027-12-31</ValidTillDate>\n      </DirectDebitExt>\n      <BeneficiaryName>SEPA Creditor</BeneficiaryName>\n    </Payment>\n  </Payments>\n</Pay>",
+  "expected_sequence": "DD-SEPA\t1\t5\t125.5\tEUR\t20261001\t\t\t\t\tSEPA direct debit\t1\tSK7700000000000000000000\t\t0\t1\t1\t1\t\t\t\tMANDATE-42\tSK12ZZZ00000000001\tCONTRACT-42\t250.75\t20271231\tSEPA Creditor\t\t"
+}

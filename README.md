@@ -23,8 +23,8 @@ any GUI related features, such as QR code preview. It's size is however much sma
 
 ## Usage
 
-You can use the `bysqr` binary to encode QR codes. PAY payment orders and standing
-orders are supported; direct debits and decoding are still in progress.
+You can use the `bysqr` binary to encode QR codes. PAY payment orders, standing
+orders, and direct debits are supported; decoding is still in progress.
 
 ### Encoding to QR code
 
@@ -176,7 +176,7 @@ llvm-config --version
 
 - [x] PAY payment-order encoder
 - [x] PAY standing-order encoder
-- [ ] PAY direct-debit encoder
+- [x] PAY direct-debit encoder
 - [ ] PAY decoder
 - [ ] Invoice encoder
 - [ ] Invoice decoder

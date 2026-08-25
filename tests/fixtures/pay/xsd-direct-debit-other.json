@@ -1,0 +1,6 @@
+{
+  "name": "XSD-derived other direct debit",
+  "schema": "spec/bysquare.xsd",
+  "source": "<?xml version=\"1.0\"?>\n<Pay type=\"Pay\">\n  <InvoiceID>DD-OTHER</InvoiceID>\n  <Payments>\n    <Payment>\n      <PaymentOptions>directdebit</PaymentOptions>\n      <CurrencyCode>EUR</CurrencyCode>\n      <PaymentNote>Other direct debit</PaymentNote>\n      <BankAccounts>\n        <BankAccount><IBAN>SK7700000000000000000000</IBAN><BIC>TATRSKBX</BIC></BankAccount>\n      </BankAccounts>\n      <DirectDebitExt>\n        <DirectDebitScheme>other</DirectDebitScheme>\n        <DirectDebitType>one-off</DirectDebitType>\n        <VariableSymbol>123456</VariableSymbol>\n        <SpecificSymbol>789</SpecificSymbol>\n        <MaxAmount>50</MaxAmount>\n      </DirectDebitExt>\n      <BeneficiaryName>Other Creditor</BeneficiaryName>\n    </Payment>\n  </Payments>\n</Pay>",
+  "expected_sequence": "DD-OTHER\t1\t4\t\tEUR\t\t\t\t\t\tOther direct debit\t1\tSK7700000000000000000000\tTATRSKBX\t0\t1\t0\t0\t123456\t789\t\t\t\t\t50\t\tOther Creditor\t\t"
+}
