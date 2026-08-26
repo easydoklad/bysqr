@@ -150,6 +150,25 @@ fn rejects_empty_and_oversized_payment_collections() {
         encoder::encode(&oversized),
         Err(Error::SequenceTooLong { .. })
     ));
+
+    let sequence =
+        encoder::encode_sequence_with_limit(&oversized, encoder::SequenceLimit::Unbounded).unwrap();
+    assert!(sequence.chars().count() > encoder::MAX_SEQUENCE_CHARACTERS);
+
+    let payload =
+        encoder::encode_with_limit(&oversized, encoder::SequenceLimit::Unbounded).unwrap();
+    assert_eq!(decoder::decode(&payload).unwrap(), oversized);
+}
+
+#[test]
+fn unbounded_mode_still_enforces_the_protocol_size_limit() {
+    let payments = (0..2_000).map(|_| minimal_payment(json!({}))).collect();
+    let pay = try_deserialize_pay(&pay_with(payments).to_string()).unwrap();
+
+    assert!(matches!(
+        encoder::encode_with_limit(&pay, encoder::SequenceLimit::Unbounded),
+        Err(Error::PayloadTooLong(_))
+    ));
 }
 
 #[test]

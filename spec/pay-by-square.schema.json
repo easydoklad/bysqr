@@ -3,7 +3,7 @@
   "$id": "https://raw.githubusercontent.com/easydoklad/bysqr/main/spec/pay-by-square.schema.json",
   "title": "PAY by square",
   "description": "Canonical JSON representation of the PAY document from spec/bysquare.xsd (by-square type 0, version 0, document type 0). Field names intentionally match the XML element names.",
-  "$comment": "The by-square sequence limit of 550 characters is validated by the encoder because it applies to the encoded tab-delimited representation, not directly to the JSON document.",
+  "$comment": "The default QR encoder validates the by-square sequence limit of 550 characters because it applies to the encoded tab-delimited representation, not directly to the JSON document. Non-QR transports may explicitly disable this limit.",
   "type": "object",
   "additionalProperties": false,
   "properties": {

@@ -57,11 +57,13 @@ pub fn decode_sequence(sequence: &str) -> Result<Pay> {
         invoice_id,
         payments: Payments { payment: payments },
     };
-    encoder::encode_sequence(&pay).map_err(|error| {
-        Error::InvalidPayload(format!(
-            "decoded PAY sequence violates the data model: {error}"
-        ))
-    })?;
+    encoder::encode_sequence_with_limit(&pay, encoder::SequenceLimit::Unbounded).map_err(
+        |error| {
+            Error::InvalidPayload(format!(
+                "decoded PAY sequence violates the data model: {error}"
+            ))
+        },
+    )?;
 
     Ok(pay)
 }

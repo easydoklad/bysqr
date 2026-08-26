@@ -165,6 +165,12 @@ sequence. The same schema used by the fixture suite is embedded in the library
 as `bysqr::PAY_JSON_SCHEMA` for consumers that want to validate JSON before
 encoding it.
 
+`encoder::encode` and `encoder::encode_sequence` enforce the 550-character QR
+limit. For the non-QR transport described by section 3.9.2 of the specification,
+use `encoder::encode_with_limit(pay, encoder::SequenceLimit::Unbounded)`. This
+mode never silently drops fields; the protocol-level 16-bit payload limit still
+applies.
+
 ## Tests
 
 Run the complete suite with:
@@ -229,6 +235,7 @@ llvm-config --version
 - [x] PAY direct-debit encoder
 - [x] PAY decoder
 - [x] PAY JSON input/output and JSON Schema
+- [x] PAY QR and unbounded sequence-length policies
 - [ ] Invoice encoder
 - [ ] Invoice decoder
 - [ ] theming

@@ -11,9 +11,27 @@ use crate::{
 
 pub const MAX_SEQUENCE_CHARACTERS: usize = 550;
 
+/// Length policy for the uncompressed PAY sequence.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SequenceLimit {
+    /// Enforce the 550-character limit required for a reliably readable QR code.
+    #[default]
+    QrCode,
+    /// Disable the QR-oriented character limit for non-QR transports.
+    ///
+    /// The binary envelope still has its protocol-level 16-bit uncompressed
+    /// length limit.
+    Unbounded,
+}
+
 /// Encode a PAY by square document into its Base32hex QR payload.
 pub fn encode(pay: &Pay) -> Result<String> {
-    codec::encode_payload(Header::PAY, &encode_sequence(pay)?)
+    encode_with_limit(pay, SequenceLimit::QrCode)
+}
+
+/// Encode a PAY document using an explicit sequence-length policy.
+pub fn encode_with_limit(pay: &Pay, limit: SequenceLimit) -> Result<String> {
+    codec::encode_payload(Header::PAY, &encode_sequence_with_limit(pay, limit)?)
 }
 
 /// Serialize a PAY document into the tab-delimited sequence defined by the
@@ -22,6 +40,14 @@ pub fn encode(pay: &Pay) -> Result<String> {
 /// This is public mainly to make conformance testing and integrations that
 /// inspect the uncompressed data straightforward.
 pub fn encode_sequence(pay: &Pay) -> Result<String> {
+    encode_sequence_with_limit(pay, SequenceLimit::QrCode)
+}
+
+/// Serialize a PAY document with an explicit sequence-length policy.
+///
+/// `SequenceLimit::Unbounded` is intended for transports other than QR codes,
+/// as described in section 3.9.2 of the PAY by square specification.
+pub fn encode_sequence_with_limit(pay: &Pay, limit: SequenceLimit) -> Result<String> {
     let payments = &pay.payments.payment;
     if payments.is_empty() {
         return Err(Error::invalid(
@@ -59,7 +85,7 @@ pub fn encode_sequence(pay: &Pay) -> Result<String> {
 
     let sequence = fields.join("\t");
     let character_count = sequence.chars().count();
-    if character_count > MAX_SEQUENCE_CHARACTERS {
+    if limit == SequenceLimit::QrCode && character_count > MAX_SEQUENCE_CHARACTERS {
         return Err(Error::SequenceTooLong {
             actual: character_count,
             maximum: MAX_SEQUENCE_CHARACTERS,
