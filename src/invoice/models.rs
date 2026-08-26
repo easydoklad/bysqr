@@ -5,6 +5,8 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
+pub use crate::diagnostic::AdvisoryDiagnostic;
+
 const BYSQUARE_NAMESPACE: &str = "http://www.bysquare.com/bysquare";
 const XSI_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema-instance";
 
@@ -40,19 +42,6 @@ impl fmt::Display for InvoiceModelError {
 }
 
 impl std::error::Error for InvoiceModelError {}
-
-/// A non-rejecting `bsqr:maxLength` advisory for one transported field.
-///
-/// `actual_character_count` describes the field's QR-sequence representation.
-/// It uses Unicode scalar-value counts for textual values; transport-specific
-/// representations such as compact dates and the PaymentMeans classifier are
-/// counted after that representation is formed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AdvisoryDiagnostic {
-    pub field_path: String,
-    pub actual_character_count: usize,
-    pub recommended_maximum: usize,
-}
 
 /// The semantic Invoice document type.
 ///
@@ -1132,6 +1121,13 @@ impl InvoiceData {
             return Err(InvoiceModelError::invalid(
                 "ForeignCurrencyCode",
                 "ForeignCurrencyCode, CurrRate, and ReferenceCurrRate must occur together",
+            ));
+        }
+
+        if matches!(self.number_of_invoice_lines, Some(value) if value < 0 || value == 1) {
+            return Err(InvoiceModelError::invalid(
+                "NumberOfInvoiceLines",
+                "must be 0 for a header-only invoice or at least 2 for a multi-line invoice; use SingleInvoiceLine for one line",
             ));
         }
 

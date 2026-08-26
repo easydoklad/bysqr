@@ -1,4 +1,7 @@
-use bysqr::pay::{decoder, encoder, try_deserialize_pay, JSON_SCHEMA};
+use bysqr::{
+    diagnostic::AdvisoryDiagnostic,
+    pay::{decoder, encoder, try_deserialize_pay, JSON_SCHEMA},
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -176,4 +179,60 @@ fn schema_rejects_invalid_direct_debit_reference_variants() {
     ] {
         assert!(!validator.is_valid(&document), "{name} was accepted");
     }
+}
+
+#[test]
+fn bsqr_max_lengths_are_advisory_in_schema_model_and_encoder() {
+    fn contains_key(value: &Value, key: &str) -> bool {
+        match value {
+            Value::Object(object) => {
+                object.contains_key(key) || object.values().any(|value| contains_key(value, key))
+            }
+            Value::Array(array) => array.iter().any(|value| contains_key(value, key)),
+            _ => false,
+        }
+    }
+
+    let schema = schema();
+    assert!(!contains_key(&schema, "maxLength"));
+    let validator = jsonschema::draft202012::new(&schema).unwrap();
+
+    let source = json!({
+        "InvoiceID": "12345678901",
+        "Payments": {
+            "Payment": [{
+                "PaymentOptions": "paymentorder",
+                "Amount": "1234567890123456",
+                "CurrencyCode": "EUR",
+                "PaymentNote": "x".repeat(141),
+                "BankAccounts": {
+                    "BankAccount": [{ "IBAN": "SK7700000000000000000000" }]
+                }
+            }]
+        }
+    });
+    assert!(validator.is_valid(&source));
+
+    let pay = try_deserialize_pay(&source.to_string()).unwrap();
+    assert_eq!(
+        pay.advisory_diagnostics(),
+        [
+            AdvisoryDiagnostic {
+                field_path: "InvoiceID".to_owned(),
+                actual_character_count: 11,
+                recommended_maximum: 10,
+            },
+            AdvisoryDiagnostic {
+                field_path: "Payments.Payment[0].Amount".to_owned(),
+                actual_character_count: 16,
+                recommended_maximum: 15,
+            },
+            AdvisoryDiagnostic {
+                field_path: "Payments.Payment[0].PaymentNote".to_owned(),
+                actual_character_count: 141,
+                recommended_maximum: 140,
+            },
+        ]
+    );
+    encoder::encode(&pay).unwrap();
 }

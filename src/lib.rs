@@ -2,6 +2,7 @@
 use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
 
 pub mod codec;
+pub mod diagnostic;
 pub mod document;
 pub mod error;
 pub mod invoice;

@@ -41,10 +41,7 @@ impl Document {
     /// Serialize this document using its canonical XML root and type metadata.
     pub fn to_xml(&self) -> Result<String> {
         match self {
-            Self::Pay(pay) => quick_xml::se::to_string(pay).map_err(|error| Error::Deserialize {
-                format: "XML",
-                message: error.to_string(),
-            }),
+            Self::Pay(pay) => pay.to_xml_string(),
             Self::Invoice(invoice) => invoice.to_xml_string().map_err(|error| Error::Deserialize {
                 format: "XML",
                 message: error.to_string(),

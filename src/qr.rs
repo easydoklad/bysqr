@@ -215,7 +215,7 @@ pub fn create_pay_svg(content: &str, theme: LogoTheme) -> Vec<u8> {
     let svg_image = code
         .render::<svg::Color>()
         .max_dimensions(pay::QR_MAX_DIMENSION, pay::QR_MAX_DIMENSION)
-        .quiet_zone(false)
+        .quiet_zone(true)
         .build();
 
     let (width, height) = theme.dimensions();
@@ -270,7 +270,7 @@ pub fn create_invoice_items_svg(content: &str) -> Vec<u8> {
     let svg_image = code
         .render::<svg::Color>()
         .max_dimensions(items::QR_MAX_DIMENSION, items::QR_MAX_DIMENSION)
-        .quiet_zone(false)
+        .quiet_zone(true)
         .build();
 
     let mut svg = create_empty_svg(CONTAINER_WIDTH as u32, CONTAINER_HEIGHT as u32);

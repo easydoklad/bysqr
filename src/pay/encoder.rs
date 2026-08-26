@@ -57,7 +57,7 @@ pub fn encode_sequence_with_limit(pay: &Pay, limit: SequenceLimit) -> Result<Str
     }
 
     let mut fields = Vec::new();
-    fields.push(optional_text("InvoiceID", pay.invoice_id.as_deref(), 10)?);
+    fields.push(optional_text(pay.invoice_id.as_deref()));
     fields.push(payments.len().to_string());
 
     // Appendix E of the specification places every beneficiary tuple after
@@ -66,21 +66,9 @@ pub fn encode_sequence_with_limit(pay: &Pay, limit: SequenceLimit) -> Result<Str
         append_payment_core(&mut fields, payment)?;
     }
     for payment in payments {
-        fields.push(optional_text(
-            "BeneficiaryName",
-            payment.beneficiary_name.as_deref(),
-            140,
-        )?);
-        fields.push(optional_text(
-            "BeneficiaryAddressLine1",
-            payment.beneficiary_address_line1.as_deref(),
-            70,
-        )?);
-        fields.push(optional_text(
-            "BeneficiaryAddressLine2",
-            payment.beneficiary_address_line2.as_deref(),
-            70,
-        )?);
+        fields.push(optional_text(payment.beneficiary_name.as_deref()));
+        fields.push(optional_text(payment.beneficiary_address_line1.as_deref()));
+        fields.push(optional_text(payment.beneficiary_address_line2.as_deref()));
     }
 
     let sequence = fields.join("\t");
@@ -177,15 +165,9 @@ fn append_payment_core(fields: &mut Vec<String>, payment: &Payment) -> Result<()
         10,
     )?);
     fields.push(optional_text(
-        "OriginatorsReferenceInformation",
         payment.originators_reference_information.as_deref(),
-        35,
-    )?);
-    fields.push(optional_text(
-        "PaymentNote",
-        payment.payment_note.as_deref(),
-        140,
-    )?);
+    ));
+    fields.push(optional_text(payment.payment_note.as_deref()));
 
     let accounts = &payment.bank_accounts.bank_account;
     if accounts.is_empty() {
@@ -269,26 +251,10 @@ fn append_direct_debit(
         direct_debit.specific_symbol.as_deref(),
         10,
     )?;
-    let originator = optional_text(
-        "DirectDebitExt.OriginatorsReferenceInformation",
-        direct_debit.originators_reference_information.as_deref(),
-        35,
-    )?;
-    let mandate_id = optional_text(
-        "DirectDebitExt.MandateID",
-        direct_debit.mandate_id.as_deref(),
-        35,
-    )?;
-    let creditor_id = optional_text(
-        "DirectDebitExt.CreditorID",
-        direct_debit.creditor_id.as_deref(),
-        35,
-    )?;
-    let contract_id = optional_text(
-        "DirectDebitExt.ContractID",
-        direct_debit.contract_id.as_deref(),
-        35,
-    )?;
+    let originator = optional_text(direct_debit.originators_reference_information.as_deref());
+    let mandate_id = optional_text(direct_debit.mandate_id.as_deref());
+    let creditor_id = optional_text(direct_debit.creditor_id.as_deref());
+    let contract_id = optional_text(direct_debit.contract_id.as_deref());
     let max_amount = optional_amount(
         "DirectDebitExt.MaxAmount",
         direct_debit.max_amount.as_ref(),
@@ -431,7 +397,7 @@ fn valid_date(field: &'static str, value: &str) -> Result<String> {
 }
 
 fn optional_digits(field: &'static str, value: Option<&str>, maximum: usize) -> Result<String> {
-    let value = optional_text(field, value, maximum)?;
+    let value = optional_text(value);
     if !value.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(Error::invalid(
             field,
@@ -447,24 +413,12 @@ fn optional_amount(field: &'static str, amount: Option<&Amount>, positive: bool)
         Some(amount) if positive && amount.is_zero() => {
             Err(Error::invalid(field, "must be greater than zero"))
         }
-        Some(amount) if amount.as_str().chars().count() > 15 => Err(Error::invalid(
-            field,
-            "must contain no more than 15 characters",
-        )),
         Some(amount) => Ok(amount.to_string()),
     }
 }
 
-fn optional_text(field: &'static str, value: Option<&str>, maximum: usize) -> Result<String> {
-    let value = value.map(sanitized).unwrap_or_default();
-    let actual = value.chars().count();
-    if actual > maximum {
-        return Err(Error::invalid(
-            field,
-            format!("contains {actual} characters; the maximum is {maximum}"),
-        ));
-    }
-    Ok(value)
+fn optional_text(value: Option<&str>) -> String {
+    value.map(sanitized).unwrap_or_default()
 }
 
 fn sanitized(value: &str) -> String {

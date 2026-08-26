@@ -5,6 +5,11 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
+use crate::diagnostic::AdvisoryDiagnostic;
+
+const BYSQUARE_NAMESPACE: &str = "http://www.bysquare.com/bysquare";
+const XSI_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema-instance";
+
 use crate::error::{Error, Result};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -151,12 +156,205 @@ impl Serialize for PaymentOptions {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "PascalCase")]
+#[serde(rename = "Pay", rename_all = "PascalCase")]
 pub struct Pay {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(rename = "InvoiceID")]
     pub invoice_id: Option<String>,
     pub payments: Payments,
+}
+
+impl Pay {
+    /// Reports transported fields that exceed their advisory XSD
+    /// `bsqr:maxLength` value without rejecting or changing the document.
+    pub fn advisory_diagnostics(&self) -> Vec<AdvisoryDiagnostic> {
+        let mut diagnostics = Vec::new();
+        diagnose_optional(
+            &mut diagnostics,
+            "InvoiceID",
+            self.invoice_id.as_deref(),
+            10,
+        );
+
+        for (payment_index, payment) in self.payments.payment.iter().enumerate() {
+            let base = format!("Payments.Payment[{payment_index}]");
+            diagnose_optional(
+                &mut diagnostics,
+                &format!("{base}.Amount"),
+                payment.amount.as_ref().map(Amount::as_str),
+                15,
+            );
+            diagnose_optional(
+                &mut diagnostics,
+                &format!("{base}.OriginatorsReferenceInformation"),
+                payment.originators_reference_information.as_deref(),
+                35,
+            );
+            diagnose_optional(
+                &mut diagnostics,
+                &format!("{base}.PaymentNote"),
+                payment.payment_note.as_deref(),
+                140,
+            );
+            diagnose_optional(
+                &mut diagnostics,
+                &format!("{base}.BeneficiaryName"),
+                payment.beneficiary_name.as_deref(),
+                140,
+            );
+            diagnose_optional(
+                &mut diagnostics,
+                &format!("{base}.BeneficiaryAddressLine1"),
+                payment.beneficiary_address_line1.as_deref(),
+                70,
+            );
+            diagnose_optional(
+                &mut diagnostics,
+                &format!("{base}.BeneficiaryAddressLine2"),
+                payment.beneficiary_address_line2.as_deref(),
+                70,
+            );
+
+            if let Some(extension) = &payment.direct_debit_ext {
+                let direct = format!("{base}.DirectDebitExt");
+                for (name, value, maximum) in [
+                    (
+                        "OriginatorsReferenceInformation",
+                        extension.originators_reference_information.as_deref(),
+                        35,
+                    ),
+                    ("MandateID", extension.mandate_id.as_deref(), 35),
+                    ("CreditorID", extension.creditor_id.as_deref(), 35),
+                    ("ContractID", extension.contract_id.as_deref(), 35),
+                ] {
+                    diagnose_optional(
+                        &mut diagnostics,
+                        &format!("{direct}.{name}"),
+                        value,
+                        maximum,
+                    );
+                }
+                diagnose_optional(
+                    &mut diagnostics,
+                    &format!("{direct}.MaxAmount"),
+                    extension.max_amount.as_ref().map(Amount::as_str),
+                    15,
+                );
+            }
+        }
+
+        diagnostics
+    }
+
+    pub fn from_xml_str(source: &str) -> Result<Self> {
+        validate_xml_root(source)?;
+        quick_xml::de::from_str(source).map_err(|error| crate::error::Error::Deserialize {
+            format: "XML",
+            message: error.to_string(),
+        })
+    }
+
+    /// Serialize canonical namespace-qualified PAY XML with its concrete type.
+    pub fn to_xml_string(&self) -> Result<String> {
+        let body =
+            quick_xml::se::to_string(self).map_err(|error| crate::error::Error::Deserialize {
+                format: "XML",
+                message: error.to_string(),
+            })?;
+        let end = body
+            .find('>')
+            .ok_or_else(|| crate::error::Error::Deserialize {
+                format: "XML",
+                message: "serialized root element has no end".to_owned(),
+            })?;
+        if !body[..end].starts_with("<Pay") {
+            return Err(crate::error::Error::Deserialize {
+                format: "XML",
+                message: "serialized root element is not Pay".to_owned(),
+            });
+        }
+        Ok(format!(
+            "{} xmlns=\"{}\" xmlns:xsi=\"{}\" xsi:type=\"Pay\"{}",
+            &body[..end],
+            BYSQUARE_NAMESPACE,
+            XSI_NAMESPACE,
+            &body[end..]
+        ))
+    }
+}
+
+fn diagnose_optional(
+    diagnostics: &mut Vec<AdvisoryDiagnostic>,
+    field_path: &str,
+    value: Option<&str>,
+    recommended_maximum: usize,
+) {
+    let Some(value) = value else {
+        return;
+    };
+    let actual_character_count = value.chars().count();
+    if actual_character_count > recommended_maximum {
+        diagnostics.push(AdvisoryDiagnostic {
+            field_path: field_path.to_owned(),
+            actual_character_count,
+            recommended_maximum,
+        });
+    }
+}
+
+fn validate_xml_root(source: &str) -> Result<()> {
+    use quick_xml::events::Event;
+
+    let mut reader = quick_xml::Reader::from_str(source);
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(root)) | Ok(Event::Empty(root)) => {
+                if root.local_name().as_ref() != b"Pay" {
+                    return Err(crate::error::Error::Deserialize {
+                        format: "XML",
+                        message: "root element must be Pay".to_owned(),
+                    });
+                }
+                for attribute in root.attributes() {
+                    let attribute =
+                        attribute.map_err(|error| crate::error::Error::Deserialize {
+                            format: "XML",
+                            message: error.to_string(),
+                        })?;
+                    let key = attribute.key.as_ref();
+                    if key == b"type" || key.ends_with(b":type") {
+                        let value = attribute
+                            .decode_and_unescape_value(reader.decoder())
+                            .map_err(|error| crate::error::Error::Deserialize {
+                                format: "XML",
+                                message: error.to_string(),
+                            })?;
+                        let local = value.rsplit_once(':').map_or(value.as_ref(), |(_, v)| v);
+                        if local != "Pay" {
+                            return Err(crate::error::Error::Deserialize {
+                                format: "XML",
+                                message: format!("unknown PAY type {value:?}"),
+                            });
+                        }
+                    }
+                }
+                return Ok(());
+            }
+            Ok(Event::Eof) => {
+                return Err(crate::error::Error::Deserialize {
+                    format: "XML",
+                    message: "document has no root element".to_owned(),
+                });
+            }
+            Ok(_) => {}
+            Err(error) => {
+                return Err(crate::error::Error::Deserialize {
+                    format: "XML",
+                    message: error.to_string(),
+                });
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -789,10 +987,7 @@ pub fn try_deserialize_pay(content: &str) -> Result<Pay> {
     let trimmed = content.trim_start();
 
     if trimmed.starts_with('<') {
-        quick_xml::de::from_str(trimmed).map_err(|error| Error::Deserialize {
-            format: "XML",
-            message: error.to_string(),
-        })
+        Pay::from_xml_str(trimmed)
     } else if trimmed.starts_with('{') {
         serde_json::from_str(trimmed).map_err(|error| Error::Deserialize {
             format: "JSON",

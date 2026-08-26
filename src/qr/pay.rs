@@ -4,7 +4,9 @@ use xmltree::Element;
 
 use super::LogoTheme;
 
-pub(crate) const QR_MAX_DIMENSION: u32 = 500;
+/// Maximum QR size including the renderer-provided four-module quiet zone.
+/// Four remaining canvas units separate that quiet zone from the frame.
+pub(crate) const QR_MAX_DIMENSION: u32 = 504;
 
 pub(crate) fn decorate(svg: &mut Element, theme: LogoTheme) {
     super::logo::decorate(
@@ -52,6 +54,12 @@ mod tests {
         assert!(svg.contains("M206.6639.2853"));
         assert!(!svg.contains("<text"));
         assert!(!svg.contains("<image"));
+    }
+
+    #[test]
+    fn qr_dimension_preserves_frame_clearance_around_the_quiet_zone() {
+        let clearance = (super::super::CONTAINER_WIDTH as u32 - QR_MAX_DIMENSION) / 2;
+        assert_eq!(clearance, 4);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use bysqr::{codec, document, invoice, Document};
+use bysqr::{codec, document, invoice, pay, Document};
 
 const MINIMAL_INVOICE: &str = include_str!("fixtures/invoice/schema/minimal-header-invoice.json");
 const CURRENT_PAYLOAD: &str =
@@ -49,4 +49,19 @@ fn generic_decoder_accepts_the_valid_current_invoice_fixture() {
             .as_str(),
         "0.2"
     );
+}
+
+#[test]
+fn generic_pay_xml_is_namespace_qualified_and_round_trips() {
+    let pay =
+        pay::try_deserialize_pay(include_str!("fixtures/pay/json/direct-debit-sepa.json")).unwrap();
+    let document = Document::Pay(pay);
+
+    let xml = document.to_xml().unwrap();
+    assert!(xml.contains("xmlns=\"http://www.bysquare.com/bysquare\""));
+    assert!(xml.contains("xsi:type=\"Pay\""));
+    assert_eq!(document::try_deserialize(&xml).unwrap(), document);
+
+    assert!(pay::try_deserialize_pay("<Invoice type=\"Pay\"/>").is_err());
+    assert!(pay::try_deserialize_pay("<Pay type=\"Invoice\"/>").is_err());
 }

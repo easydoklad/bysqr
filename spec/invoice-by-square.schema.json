@@ -48,6 +48,10 @@
     "CustomerParty": { "$ref": "#/$defs/CustomerParty" },
     "NumberOfInvoiceLines": {
       "type": "integer",
+      "anyOf": [
+        { "const": 0 },
+        { "minimum": 2 }
+      ],
       "description": "Invoice line count; zero denotes a header-only invoice. Advisory QR-sequence bsqr:maxLength: 11."
     },
     "InvoiceDescription": {

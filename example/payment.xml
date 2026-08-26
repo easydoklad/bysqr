@@ -1,20 +1,22 @@
 <?xml version="1.0"?>
-<Pay type="Pay">
+<Pay xmlns="http://www.bysquare.com/bysquare"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:type="Pay">
     <Payments>
         <Payment>
+            <PaymentOptions>paymentorder</PaymentOptions>
             <Amount>12.34</Amount>
+            <CurrencyCode>EUR</CurrencyCode>
+            <VariableSymbol>20202020</VariableSymbol>
+            <PaymentNote>20202020</PaymentNote>
             <BankAccounts>
                 <BankAccount>
                     <IBAN>SK8811000000002945102347</IBAN>
                     <BIC>TATRSKBX</BIC>
                 </BankAccount>
             </BankAccounts>
-            <CurrencyCode>EUR</CurrencyCode>
             <BeneficiaryName>Test</BeneficiaryName>
-            <PaymentNote>20202020</PaymentNote>
-            <VariableSymbol>20202020</VariableSymbol>
             <BeneficiaryAddressLine1>Test</BeneficiaryAddressLine1>
-            <PaymentOptions>paymentorder</PaymentOptions>
         </Payment>
     </Payments>
 </Pay>

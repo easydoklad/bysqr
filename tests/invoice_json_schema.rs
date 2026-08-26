@@ -95,8 +95,23 @@ fn schema_enforces_required_fields_choices_patterns_and_vat_range() {
     invalid_date["IssueDate"] = json!("2026/08/26");
     cases.push(("invalid canonical date", invalid_date));
 
+    for count in [-1, 1] {
+        let mut invalid_count = minimal();
+        invalid_count["NumberOfInvoiceLines"] = json!(count);
+        cases.push(("invalid invoice line count", invalid_count));
+    }
+
     for (name, document) in cases {
         assert!(!validator.is_valid(&document), "{name} was accepted");
+    }
+}
+
+#[test]
+fn model_rejects_negative_and_single_line_counts() {
+    for count in [-1, 1] {
+        let mut source = minimal();
+        source["NumberOfInvoiceLines"] = json!(count);
+        assert!(try_deserialize_invoice(&source.to_string()).is_err());
     }
 }
 

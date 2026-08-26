@@ -10,8 +10,7 @@
     "InvoiceID": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 10,
-      "description": "Invoice number or an issuer-internal identifier associated with the payment."
+      "description": "Invoice number or an issuer-internal identifier associated with the payment. Advisory QR-sequence bsqr:maxLength: 10."
     },
     "Payments": {
       "$ref": "#/$defs/Payments"
@@ -72,8 +71,7 @@
         "PaymentNote": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 140,
-          "description": "Message that helps the beneficiary identify the payment."
+          "description": "Message that helps the beneficiary identify the payment. Advisory QR-sequence bsqr:maxLength: 140."
         },
         "BankAccounts": {
           "$ref": "#/$defs/BankAccounts"
@@ -87,20 +85,17 @@
         "BeneficiaryName": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 140,
-          "description": "Beneficiary name."
+          "description": "Beneficiary name. Advisory QR-sequence bsqr:maxLength: 140."
         },
         "BeneficiaryAddressLine1": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 70,
-          "description": "First beneficiary address line."
+          "description": "First beneficiary address line. Advisory QR-sequence bsqr:maxLength: 70."
         },
         "BeneficiaryAddressLine2": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 70,
-          "description": "Second beneficiary address line."
+          "description": "Second beneficiary address line. Advisory QR-sequence bsqr:maxLength: 70."
         }
       },
       "required": [
@@ -182,9 +177,8 @@
     },
     "Amount": {
       "type": "string",
-      "maxLength": 15,
       "pattern": "^(?:[1-9][0-9]*(?:\\.[0-9]*[1-9])?|0\\.[0-9]*[1-9])$",
-      "description": "Positive canonical decimal serialized as a string to preserve exact precision: no sign, exponent, redundant leading zeroes, or trailing fractional zeroes."
+      "description": "Positive canonical decimal serialized as a string to preserve exact precision: no sign, exponent, redundant leading zeroes, or trailing fractional zeroes. Advisory QR-sequence bsqr:maxLength: 15."
     },
     "CurrencyCode": {
       "type": "string",
@@ -215,8 +209,7 @@
     "ReferenceInformation": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 35,
-      "description": "Originator's reference information, typically a SEPA reference."
+      "description": "Originator's reference information, typically a SEPA reference. Advisory QR-sequence bsqr:maxLength: 35."
     },
     "BankAccounts": {
       "type": "object",
@@ -380,20 +373,17 @@
         "MandateID": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 35,
-          "description": "SEPA mandate identifier agreed by creditor and debtor."
+          "description": "SEPA mandate identifier agreed by creditor and debtor. Advisory QR-sequence bsqr:maxLength: 35."
         },
         "CreditorID": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 35,
-          "description": "SEPA creditor identifier."
+          "description": "SEPA creditor identifier. Advisory QR-sequence bsqr:maxLength: 35."
         },
         "ContractID": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 35,
-          "description": "Optional contract identifier agreed by creditor and debtor."
+          "description": "Optional contract identifier agreed by creditor and debtor. Advisory QR-sequence bsqr:maxLength: 35."
         },
         "MaxAmount": {
           "$ref": "#/$defs/Amount",
