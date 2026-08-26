@@ -105,6 +105,25 @@ limits are enforced.
 To save generated QR code as image, use `--save` option with path where to save the image. Type of the file is
 determined by the output file extension. We support generating `svg`, `png` and `jpeg` images.
 
+#### INVOICE visual themes
+
+INVOICE QR output supports every composition documented by the by-square logo
+manual: print or electronic layout, branding at the bottom, top, left or right,
+and the light orange, dark orange, gray or black color variation. The default is
+the dark-orange print layout with bottom branding.
+
+```shell
+bysqr encode --src invoice.json --save invoice.svg \
+  --invoice-layout electronic \
+  --invoice-position left \
+  --invoice-color gray
+```
+
+These are constrained presets, rather than arbitrary styling controls. The QR
+matrix remains black on white, the four-module quiet area is preserved, and
+custom colors or altered logo proportions are intentionally not presented as
+logo-manual-compliant output.
+
 #### QR code preview
 
 You may also preview generated code instead of saving, by passing a `--preview` option. This will open a window
@@ -218,6 +237,31 @@ assert_eq!(decoded, invoice);
 assert!(matches!(bysqr::decode(&payload)?, Document::Invoice(_)));
 # Ok::<(), bysqr::error::Error>(())
 ```
+
+Logo-manual-compliant INVOICE rendering is available through a typed theme:
+
+```rust
+use bysqr::qr::{
+    create_invoice_svg_with_theme, InvoiceColor, InvoiceTheme, LogoLayout,
+    LogoPosition,
+};
+
+let theme = InvoiceTheme::new(
+    LogoLayout::Electronic,
+    LogoPosition::Right,
+    InvoiceColor::Black,
+);
+let svg = create_invoice_svg_with_theme(&payload, theme);
+```
+
+`LogoLayout::ALL`, `LogoPosition::ALL` and `InvoiceColor::ALL` expose the full
+2 × 4 × 4 preset matrix. A deterministic visual gallery can be generated with:
+
+```shell
+cargo run --example invoice_theme_gallery
+```
+
+The resulting `target/invoice-theme-gallery.html` contains all 32 variants.
 
 INVOICE ITEMS exposes both individual-block and complete-list APIs. The
 convenience encoder follows the specification's conservative recommendation of
