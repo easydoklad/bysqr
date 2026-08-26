@@ -1,6 +1,7 @@
 # bysqr
 
-Open source PAY by square and INVOICE by square encoder/decoder written in Rust.
+Open source PAY by square, INVOICE by square and INVOICE ITEMS by square
+encoder/decoder written in Rust.
 
 ## Notice
 
@@ -23,26 +24,28 @@ any GUI related features, such as QR code preview. It's size is however much sma
 
 ## Usage
 
-You can use the `bysqr` binary to encode and decode PAY by square and INVOICE
-by square data. PAY payment orders, standing orders and direct debits are
-supported, together with Invoice, Proforma Invoice, Credit Note, Debit Note and
-Advance Invoice documents.
+You can use the `bysqr` binary to encode and decode PAY by square, INVOICE by
+square and individual INVOICE ITEMS by square blocks. PAY payment orders,
+standing orders and direct debits are supported, together with Invoice,
+Proforma Invoice, Credit Note, Debit Note and Advance Invoice documents.
 
 ### Encoding to QR code
 
-To encode a PAY or INVOICE document to a QR code, run `encode` with the source
-document:
+To encode a PAY, INVOICE or one INVOICE ITEMS block to a QR code, run `encode`
+with the source document:
 
 ```shell
 bysqr encode --src payment.xml --save ~/Desktop/qr.svg
 bysqr encode --src invoice.json --save ~/Desktop/invoice.svg
+bysqr encode --src invoice-items.json --save ~/Desktop/items.svg
 
 bysqr encode --src '<?xml version="1.0"?><Pay type="Pay">...</Pay>' --save ~/Desktop/qr.svg
 ```
 
-Provided source (`--src`) may be a canonical PAY or INVOICE XML/JSON document.
-You can pass either a file path or the document itself. The document root or
-`DocumentType` selects the correct encoder and QR branding automatically.
+Provided source (`--src`) may be a canonical PAY, INVOICE or INVOICE ITEMS
+XML/JSON document. You can pass either a file path or the document itself. The
+document root, `DocumentType`, or Items marker fields select the correct
+encoder and QR branding automatically.
 
 #### JSON input
 
@@ -86,11 +89,18 @@ the same value in the `Invoice` root's `xsi:type` attribute. Exact decimal
 values, including VAT rates, are represented as strings; the canonical VAT
 range is `0` through `1`, so 20% is written as `"0.2"`.
 
+The [INVOICE ITEMS JSON Schema](spec/invoice-items-by-square.schema.json)
+describes the separate type-2 blocks used by multi-line invoices. Each block
+contains the parent `InvoiceID`, its `FirstInvoiceLineID`, and an explicit
+`InvoiceLines.InvoiceLine` array. A line uses exactly one of `ItemName` and
+`ItemEANCode`; an optional billing period must contain both dates.
+
 Computed XSD properties are optional read-only values in the JSON Schema and
-are not transported in the QR sequence. Use the explicit Invoice calculation
-API when totals are needed. `bsqr:maxLength` annotations are exposed as
-advisory diagnostics and never cause silent truncation; hard XSD constraints
-and the 550-character QR limit are enforced.
+are not transported in the QR sequence. Use `Invoice::calculate_totals` and
+`invoice_items::InvoiceLine::calculate` when computed values are needed.
+`bsqr:maxLength` annotations are exposed as advisory diagnostics and never
+cause silent truncation; hard XSD constraints and the applicable QR transport
+limits are enforced.
 
 To save generated QR code as image, use `--save` option with path where to save the image. Type of the file is
 determined by the output file extension. We support generating `svg`, `png` and `jpeg` images.
@@ -141,9 +151,10 @@ bysqr encode --src payment.xml --format jpeg --quality 95
 ### Decoding a payload
 
 The decoder accepts the Base32hex content carried by the QR code, classifies its
-header and prints a PAY or INVOICE document as canonical JSON or XML. JSON
-output conforms to the corresponding schema in `spec/`. The decoder evaluates
-the text payload directly; optional raster image scanning is described below.
+header and prints a PAY, INVOICE or INVOICE ITEMS document as canonical JSON or
+XML. JSON output conforms to the corresponding schema in `spec/`. The decoder
+evaluates the text payload directly; optional raster image scanning is
+described below.
 
 ```shell
 bysqr decode --src '000620000...' --format json
@@ -166,8 +177,9 @@ The lower-level `qr_reader::extract_payloads_from_bytes` API returns the text
 from every detected QR code. `qr_reader::decode_document_from_bytes` selects
 and validates exactly one supported by-square document;
 `qr_reader::decode_pay_from_bytes` remains available for PAY-only consumers.
-PNG and JPEG decoding, including a rendered INVOICE QR, are covered by the
-end-to-end test suite.
+`qr_reader::decode_invoice_items_from_bytes` reassembles every compatible Items
+block found in one image. PNG and JPEG decoding, including rendered INVOICE and
+ITEMS QR codes, are covered by the end-to-end test suite.
 
 ## Build
 
@@ -207,6 +219,29 @@ assert!(matches!(bysqr::decode(&payload)?, Document::Invoice(_)));
 # Ok::<(), bysqr::error::Error>(())
 ```
 
+INVOICE ITEMS exposes both individual-block and complete-list APIs. The
+convenience encoder follows the specification's conservative recommendation of
+four lines per QR; the decoder also accepts larger deployed blocks:
+
+```rust
+use bysqr::invoice_items;
+
+let source = include_str!("invoice-items.json");
+let block = invoice_items::try_deserialize_invoice_items(source)?;
+let lines = block.invoice_lines.invoice_line.clone();
+
+let payloads = invoice_items::encode_chunks(block.invoice_id.clone(), lines.clone())?;
+let reassembled = invoice_items::decode_chunks(&payloads)?;
+assert_eq!(reassembled.invoice_id, block.invoice_id);
+assert_eq!(reassembled.invoice_lines, lines);
+# Ok::<(), bysqr::error::Error>(())
+```
+
+When the parent `invoice::Invoice` is available, call
+`reassembled.validate_against_invoice(&invoice)` as well. It detects a mismatched
+`InvoiceID` and a missing final block by comparing the reassembled length with
+the parent's `NumberOfInvoiceLines`.
+
 `pay::encode_sequence` exposes the uncompressed tab-delimited form for
 conformance tooling. `codec::decode_payload` validates and inspects an encoded
 envelope, including its header, LZMA data, declared two-byte size, CRC32, and
@@ -215,12 +250,17 @@ model, while `pay::decode_sequence` can inspect an already uncompressed
 sequence. The same schema used by the fixture suite is embedded in the library
 as `bysqr::pay::JSON_SCHEMA` for consumers that want to validate JSON before
 encoding it. INVOICE provides the corresponding `invoice::encode_sequence`,
-`invoice::decode_sequence` and `invoice::JSON_SCHEMA` APIs.
+`invoice::decode_sequence` and `invoice::JSON_SCHEMA` APIs. INVOICE ITEMS
+provides `invoice_items::encode_sequence`, `invoice_items::decode_sequence`,
+`invoice_items::JSON_SCHEMA`, plus chunking and strict reassembly helpers.
 
-The domain `encode` and `encode_sequence` functions enforce the 550-character
-QR limit. For non-QR transport use the domain's `encode_with_limit` function
-and `SequenceLimit::Unbounded`. This mode never silently drops fields; the
-protocol-level 16-bit payload limit still applies.
+The PAY and INVOICE domain `encode` and `encode_sequence` functions enforce the
+550-character QR limit. For non-QR transport use the domain's
+`encode_with_limit` function and `SequenceLimit::Unbounded`. INVOICE ITEMS
+avoids a global sequence cut-off: its high-level encoder chunks by the
+specification's recommended line count, while explicit single-block encoding
+remains interoperable with larger deployed blocks. No mode silently drops
+fields; the protocol-level 16-bit payload limit always applies.
 
 With the `qr-reader` feature enabled, Rust consumers can pass raster bytes to
 `qr_reader::decode_document_from_bytes`. Without it they can feed text from any
@@ -236,11 +276,13 @@ Run the complete suite with:
 cargo test --all-features
 ```
 
-Valid offline fixtures under `tests/fixtures/pay` and `tests/fixtures/invoice`
-cover known payloads and XSD-derived cases. Tests compare decoded data instead
-of compressed strings because different LZMA streams can represent the same
-valid payload. The suite has no network dependency and also verifies that its
-own branded PAY and INVOICE raster output can be scanned back into typed data.
+Valid offline fixtures under `tests/fixtures/pay`, `tests/fixtures/invoice` and
+`tests/fixtures/invoice-items` cover known payloads and XSD-derived cases. The
+Items fixtures include named/EAN lines, references, a negative deposit, and a
+deployed two-QR sequence. Tests compare decoded data instead of compressed
+strings because different LZMA streams can represent the same valid payload.
+The suite has no network dependency and also verifies that its own branded PAY,
+INVOICE and ITEMS raster output can be scanned back into typed data.
 
 ### WASM build
 
@@ -267,9 +309,9 @@ wasm-pack build --target web --features wasm,qr-reader
 ```
 
 This additionally exports `decode_image_to_json` and `decode_image_to_xml`,
-which accept PNG or JPEG bytes and classify PAY or INVOICE documents. The
-text-only encoding and decoding exports support both families without the QR
-reader.
+which accept PNG or JPEG bytes and classify PAY, INVOICE or INVOICE ITEMS
+documents. The text-only encoding and decoding exports support all three
+families without the QR reader.
 
 #### Building for wasm on Ubuntu
 
