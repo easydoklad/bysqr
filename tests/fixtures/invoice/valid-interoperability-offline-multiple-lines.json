@@ -1,0 +1,60 @@
+{
+  "DocumentType": "Invoice",
+  "InvoiceID": "INV-MULTI-2026",
+  "IssueDate": "2026-08-20",
+  "TaxPointDate": "2026-08-21",
+  "OrderID": "ORDER-42",
+  "DeliveryNoteID": "DELIVERY-7",
+  "LocalCurrencyCode": "EUR",
+  "SupplierParty": {
+    "PartyName": "Valid Supplier s.r.o.",
+    "CompanyTaxID": "2026000001",
+    "CompanyVATID": "SK2026000001",
+    "CompanyRegisterID": "50123456",
+    "PostalAddress": {
+      "StreetName": "Testovacia",
+      "BuildingNumber": "12",
+      "CityName": "Žilina",
+      "PostalZone": "010 01",
+      "State": "Žilinský kraj",
+      "Country": "SVK"
+    },
+    "Contact": {
+      "Name": "Fakturácia",
+      "Telephone": "+421900111222",
+      "EMail": "invoice@example.test"
+    }
+  },
+  "CustomerParty": {
+    "PartyName": "Valid Customer a.s.",
+    "CompanyTaxID": "2026000002",
+    "CompanyVATID": "SK2026000002",
+    "CompanyRegisterID": "50987654",
+    "PartyIdentification": "CUST-99"
+  },
+  "NumberOfInvoiceLines": 3,
+  "InvoiceDescription": "Dodávka tovaru so zálohou",
+  "TaxCategorySummaries": {
+    "TaxCategorySummary": [
+      {
+        "ClassifiedTaxCategory": "0.1",
+        "TaxExclusiveAmount": "150",
+        "TaxAmount": "15",
+        "AlreadyClaimedTaxExclusiveAmount": "0",
+        "AlreadyClaimedTaxAmount": "0"
+      },
+      {
+        "ClassifiedTaxCategory": "0.2",
+        "TaxExclusiveAmount": "200",
+        "TaxAmount": "40",
+        "AlreadyClaimedTaxExclusiveAmount": "20",
+        "AlreadyClaimedTaxAmount": "4"
+      }
+    ]
+  },
+  "MonetarySummary": {
+    "PayableRoundingAmount": "0.01",
+    "PaidDepositsAmount": "10"
+  },
+  "PaymentMeans": "mutualOffset"
+}

@@ -1,8 +1,8 @@
 # Valid offline Invoice interoperability fixtures
 
-These source-neutral fixtures contain only an encoded Invoice payload and its
-exact decoded tab-separated sequence. They do not depend on an Invoice XML or
-JSON model, network access, QR image decoding, or production Invoice code.
+These source-neutral fixtures contain valid encoded Invoice payloads and either
+their exact decoded tab-separated sequence or their canonical semantic JSON.
+They have no network or QR image dependency at test time.
 
 The integration test passes each payload to `crate::codec::decode_payload`.
 Successful decoding validates the Base32hex envelope, declared length, raw LZMA
@@ -20,3 +20,14 @@ header, all 45 TSV fields, and selected identifying fields.
 Each text fixture has one final line ending for repository readability. The
 test removes only that line ending, preserving meaningful trailing tabs (the
 official current sequence ends with an empty 45th field).
+
+- `valid-interoperability-offline-multiple-lines.*` covers three invoice lines,
+  two VAT summaries, a claimed deposit, optional party/contact fields, rounding
+  and the `mutualOffset` payment classifier.
+- `valid-interoperability-offline-single-line.*` covers the compact embedded
+  single-line representation with an EAN, decimal quantity, 23% VAT, negative
+  rounding and the `cashOnDelivery` payment classifier.
+
+The semantic fixtures compare the decoded model with canonical JSON, verify the
+exact header and field count, and then exercise a semantic encoder/decoder
+round trip. Their payload strings remain fixed interoperability inputs.
