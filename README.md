@@ -1,6 +1,6 @@
 # bysqr
 
-Open source PAY by square encoder written in Rust.
+Open source PAY by square and INVOICE by square encoder/decoder written in Rust.
 
 ## Notice
 
@@ -23,21 +23,26 @@ any GUI related features, such as QR code preview. It's size is however much sma
 
 ## Usage
 
-You can use the `bysqr` binary to encode and decode PAY by square data. Payment
-orders, standing orders, and direct debits are supported.
+You can use the `bysqr` binary to encode and decode PAY by square and INVOICE
+by square data. PAY payment orders, standing orders and direct debits are
+supported, together with Invoice, Proforma Invoice, Credit Note, Debit Note and
+Advance Invoice documents.
 
 ### Encoding to QR code
 
-To encode `Pay` to a QR code, you can run the `encode` command with the following arguments:
+To encode a PAY or INVOICE document to a QR code, run `encode` with the source
+document:
 
 ```shell
 bysqr encode --src payment.xml --save ~/Desktop/qr.svg
+bysqr encode --src invoice.json --save ~/Desktop/invoice.svg
 
 bysqr encode --src '<?xml version="1.0"?><Pay type="Pay">...</Pay>' --save ~/Desktop/qr.svg
 ```
 
-Provided source (`--src`) may be a PAY by square XML document or its canonical
-JSON representation. You can pass either a file path or the document itself.
+Provided source (`--src`) may be a canonical PAY or INVOICE XML/JSON document.
+You can pass either a file path or the document itself. The document root or
+`DocumentType` selects the correct encoder and QR branding automatically.
 
 #### JSON input
 
@@ -73,6 +78,19 @@ JSON Schema Draft 2020-12, including descriptions and constraints derived from
 the PAY part of the XML schema. Canonical amounts are strings so exact decimal
 precision is preserved. Numeric JSON amounts are accepted as an input
 convenience, but schema-conformant documents use strings.
+
+The [INVOICE JSON Schema](spec/invoice-by-square.schema.json) follows the same
+rules. It requires `DocumentType`, whose value is one of `Invoice`,
+`ProformaInvoice`, `CreditNote`, `DebitNote` or `AdvanceInvoice`. XML carries
+the same value in the `Invoice` root's `xsi:type` attribute. Exact decimal
+values, including VAT rates, are represented as strings; the canonical VAT
+range is `0` through `1`, so 20% is written as `"0.2"`.
+
+Computed XSD properties are optional read-only values in the JSON Schema and
+are not transported in the QR sequence. Use the explicit Invoice calculation
+API when totals are needed. `bsqr:maxLength` annotations are exposed as
+advisory diagnostics and never cause silent truncation; hard XSD constraints
+and the 550-character QR limit are enforced.
 
 To save generated QR code as image, use `--save` option with path where to save the image. Type of the file is
 determined by the output file extension. We support generating `svg`, `png` and `jpeg` images.
@@ -122,11 +140,10 @@ bysqr encode --src payment.xml --format jpeg --quality 95
 
 ### Decoding a payload
 
-The decoder accepts the Base32hex content carried by the QR code and prints a
-PAY document as canonical JSON or XML. JSON output conforms to
-[`spec/pay-by-square.schema.json`](spec/pay-by-square.schema.json). The decoder
-evaluates the text payload directly; optional raster image scanning is described
-below.
+The decoder accepts the Base32hex content carried by the QR code, classifies its
+header and prints a PAY or INVOICE document as canonical JSON or XML. JSON
+output conforms to the corresponding schema in `spec/`. The decoder evaluates
+the text payload directly; optional raster image scanning is described below.
 
 ```shell
 bysqr decode --src '000620000...' --format json
@@ -142,13 +159,15 @@ feature:
 ```shell
 cargo build --release --features qr-reader
 bysqr decode --src payment.png --format json
-bysqr decode --src payment.jpg --format xml
+bysqr decode --src invoice.jpg --format xml
 ```
 
 The lower-level `qr_reader::extract_payloads_from_bytes` API returns the text
-from every detected QR code. `qr_reader::decode_pay_from_bytes` additionally
-selects and validates exactly one PAY payload. PNG and JPEG decoding are covered
-by the end-to-end test suite.
+from every detected QR code. `qr_reader::decode_document_from_bytes` selects
+and validates exactly one supported by-square document;
+`qr_reader::decode_pay_from_bytes` remains available for PAY-only consumers.
+PNG and JPEG decoding, including a rendered INVOICE QR, are covered by the
+end-to-end test suite.
 
 ## Build
 
@@ -174,6 +193,20 @@ assert_eq!(decoded, pay);
 # Ok::<(), bysqr::error::Error>(())
 ```
 
+INVOICE uses the parallel domain API:
+
+```rust
+use bysqr::{invoice, Document};
+
+let invoice = invoice::try_deserialize_invoice(include_str!("invoice.json"))?;
+let payload = invoice::encode(&invoice)?;
+let decoded = invoice::decode(&payload)?;
+assert_eq!(decoded, invoice);
+
+assert!(matches!(bysqr::decode(&payload)?, Document::Invoice(_)));
+# Ok::<(), bysqr::error::Error>(())
+```
+
 `pay::encode_sequence` exposes the uncompressed tab-delimited form for
 conformance tooling. `codec::decode_payload` validates and inspects an encoded
 envelope, including its header, LZMA data, declared two-byte size, CRC32, and
@@ -181,18 +214,19 @@ UTF-8 sequence. `pay::decode` validates and reconstructs the complete PAY
 model, while `pay::decode_sequence` can inspect an already uncompressed
 sequence. The same schema used by the fixture suite is embedded in the library
 as `bysqr::pay::JSON_SCHEMA` for consumers that want to validate JSON before
-encoding it.
+encoding it. INVOICE provides the corresponding `invoice::encode_sequence`,
+`invoice::decode_sequence` and `invoice::JSON_SCHEMA` APIs.
 
-`pay::encode` and `pay::encode_sequence` enforce the 550-character QR
-limit. For the non-QR transport described by section 3.9.2 of the specification,
-use `pay::encode_with_limit(pay, pay::SequenceLimit::Unbounded)`. This
-mode never silently drops fields; the protocol-level 16-bit payload limit still
-applies.
+The domain `encode` and `encode_sequence` functions enforce the 550-character
+QR limit. For non-QR transport use the domain's `encode_with_limit` function
+and `SequenceLimit::Unbounded`. This mode never silently drops fields; the
+protocol-level 16-bit payload limit still applies.
 
 With the `qr-reader` feature enabled, Rust consumers can pass raster bytes to
-`qr_reader::decode_pay_from_bytes`. Without it they can feed text from any
-external scanner directly to `pay::decode`. The crate-level `bysqr::decode`
-classifies a payload and returns a `bysqr::Document`.
+`qr_reader::decode_document_from_bytes`. Without it they can feed text from any
+external scanner directly to `bysqr::decode`. The crate-level function
+classifies the payload and returns a `bysqr::Document`. Likewise,
+`bysqr::try_deserialize` classifies canonical JSON/XML source data.
 
 ## Tests
 
@@ -202,11 +236,11 @@ Run the complete suite with:
 cargo test --all-features
 ```
 
-Offline fixtures under `tests/fixtures/pay` include known-good PAY by square
-payloads and cases derived from `spec/bysquare.xsd`. Tests compare decoded data
-instead of compressed strings because different LZMA streams can represent the
-same valid payload. No external service or PNG scanning is required during
-tests.
+Valid offline fixtures under `tests/fixtures/pay` and `tests/fixtures/invoice`
+cover known payloads and XSD-derived cases. Tests compare decoded data instead
+of compressed strings because different LZMA streams can represent the same
+valid payload. The suite has no network dependency and also verifies that its
+own branded PAY and INVOICE raster output can be scanned back into typed data.
 
 ### WASM build
 
@@ -233,8 +267,9 @@ wasm-pack build --target web --features wasm,qr-reader
 ```
 
 This additionally exports `decode_image_to_json` and `decode_image_to_xml`,
-which accept PNG or JPEG bytes. The text-only `decode_to_json` and
-`decode_to_xml` exports remain available without the QR reader.
+which accept PNG or JPEG bytes and classify PAY or INVOICE documents. The
+text-only encoding and decoding exports support both families without the QR
+reader.
 
 #### Building for wasm on Ubuntu
 
@@ -269,10 +304,14 @@ llvm-config --version
 - [x] PAY decoder
 - [x] PAY JSON input/output and JSON Schema
 - [x] PAY QR and unbounded sequence-length policies
-- [x] optional PAY QR image reader
-- [ ] Invoice encoder
-- [ ] Invoice decoder
+- [x] optional generic QR image reader
+- [x] INVOICE model, encoder and decoder for all five document types
+- [x] INVOICE JSON/XML and JSON Schema
+- [x] INVOICE QR branding and raster scan verification
+- [ ] INVOICE ITEMS model, encoder and decoder
+- [ ] additional INVOICE interoperability fixtures
 - [ ] theming
 - [ ] support for different logo position
 - [ ] general code refactoring
 - [x] PAY encoder conformance tests
+- [x] INVOICE encoder/decoder conformance tests
