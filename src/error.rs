@@ -57,7 +57,7 @@ impl fmt::Display for Error {
             Self::Unsupported(message) => formatter.write_str(message),
             Self::SequenceTooLong { actual, maximum } => write!(
                 formatter,
-                "PAY by square sequence has {actual} characters; the maximum is {maximum}"
+                "by-square sequence has {actual} characters; the maximum is {maximum}"
             ),
             Self::PayloadTooLong(actual) => write!(
                 formatter,
@@ -73,7 +73,7 @@ impl fmt::Display for Error {
                 message,
             } => write!(
                 formatter,
-                "invalid PAY sequence field {field} at position {position}: {message}"
+                "invalid by-square sequence field {field} at position {position}: {message}"
             ),
             Self::Compression(message) => write!(formatter, "LZMA error: {message}"),
             Self::ChecksumMismatch { expected, actual } => write!(
