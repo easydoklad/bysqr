@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use usvg::{Options, Transform, Tree};
 use xmltree::{Element, EmitterConfig};
 
+mod invoice;
+
 pub const CONTAINER_WIDTH: f32 = 512.0;
 pub const CONTAINER_HEIGHT: f32 = 600.0;
 
@@ -195,6 +197,29 @@ pub fn create_pay_svg(content: &str, theme: Theme) -> Vec<u8> {
     insert_pay_icon(&mut svg, &theme.icon_color);
     insert_by_square_text(&mut svg, &theme.by_square_text_color);
     insert_pay_text(&mut svg, &theme.pay_text_color);
+
+    let mut qr = Vec::new();
+    let emitter_options = EmitterConfig::default().write_document_declaration(false);
+    svg.write_with_config(&mut qr, emitter_options)
+        .expect("unable to write generated SVG. possible XML corruption");
+    qr
+}
+
+/// Render an INVOICE by square payload with the standard orange branding.
+pub fn create_invoice_svg(content: &str) -> Vec<u8> {
+    let code = QrCode::with_error_correction_level(content.as_bytes(), EcLevel::L)
+        .expect("unable to create QR code");
+
+    let svg_image = code
+        .render::<svg::Color>()
+        .max_dimensions(invoice::QR_MAX_DIMENSION, invoice::QR_MAX_DIMENSION)
+        .quiet_zone(false)
+        .build();
+
+    let mut svg = create_empty_svg();
+    insert_background(&mut svg, "#ffffff");
+    insert_qr_content(&mut svg, &svg_image);
+    invoice::decorate(&mut svg);
 
     let mut qr = Vec::new();
     let emitter_options = EmitterConfig::default().write_document_declaration(false);
