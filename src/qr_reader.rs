@@ -1,15 +1,18 @@
-//! Optional QR image reader for PAY by square.
+//! Optional QR image reader for supported by-square document families.
 //!
 //! Enable the `qr-reader` Cargo feature to extract text payloads from raster
 //! images. Consumers that already have a QR scanner can keep using
-//! [`crate::pay::decode`] directly without enabling this module.
+//! [`crate::decode`] directly without enabling this module. The PAY-specific
+//! functions remain available for consumers that only accept payments.
 
 use image::DynamicImage;
 use rqrr::PreparedImage;
 
 use crate::{
+    document,
     error::{Error, Result},
     pay::{self, Pay},
+    Document,
 };
 
 /// Extract every decodable QR text payload from a raster image.
@@ -62,6 +65,41 @@ pub fn decode_pay_from_bytes(bytes: &[u8]) -> Result<Pay> {
     decode_pay(&image)
 }
 
+/// Find and decode exactly one valid by-square document in a raster image.
+///
+/// Other QR codes in the same image are ignored. More than one valid
+/// by-square code is treated as ambiguous instead of selecting one silently.
+pub fn decode_document(image: &DynamicImage) -> Result<Document> {
+    decode_document_payloads(extract_payloads(image)?)
+}
+
+/// Decode raster image bytes and reconstruct exactly one by-square document.
+pub fn decode_document_from_bytes(bytes: &[u8]) -> Result<Document> {
+    let image =
+        image::load_from_memory(bytes).map_err(|error| Error::ImageDecode(error.to_string()))?;
+    decode_document(&image)
+}
+
+fn decode_document_payloads(payloads: Vec<String>) -> Result<Document> {
+    let decoded_count = payloads.len();
+    let mut documents = payloads
+        .iter()
+        .filter_map(|payload| document::decode(payload.trim()).ok());
+    let first = documents.next();
+    let second = documents.next();
+
+    match (first, second) {
+        (Some(document), None) => Ok(document),
+        (Some(_), Some(_)) => {
+            let count = 2 + documents.count();
+            Err(Error::MultipleBySquareQrCodes(count))
+        }
+        (None, _) => Err(Error::BySquareQrNotFound {
+            decoded: decoded_count,
+        }),
+    }
+}
+
 fn decode_pay_payloads(payloads: Vec<String>) -> Result<Pay> {
     if payloads.len() == 1 {
         return pay::decode(payloads[0].trim());
@@ -88,7 +126,7 @@ fn decode_pay_payloads(payloads: Vec<String>) -> Result<Pay> {
 
 #[cfg(test)]
 mod tests {
-    use super::decode_pay_payloads;
+    use super::{decode_document_payloads, decode_pay_payloads};
     use crate::{error::Error, pay};
 
     fn valid_payload() -> String {
@@ -115,6 +153,23 @@ mod tests {
         assert!(matches!(
             decode_pay_payloads(vec![payload.clone(), payload]),
             Err(Error::MultiplePayQrCodes(2))
+        ));
+    }
+
+    #[test]
+    fn selects_or_rejects_generic_by_square_payloads() {
+        let payload = valid_payload();
+        assert!(matches!(
+            decode_document_payloads(vec!["HELLO".to_owned(), payload.clone()]),
+            Ok(crate::Document::Pay(_))
+        ));
+        assert!(matches!(
+            decode_document_payloads(vec!["HELLO".to_owned()]),
+            Err(Error::BySquareQrNotFound { decoded: 1 })
+        ));
+        assert!(matches!(
+            decode_document_payloads(vec![payload.clone(), payload]),
+            Err(Error::MultipleBySquareQrCodes(2))
         ));
     }
 }

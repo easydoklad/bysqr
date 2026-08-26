@@ -36,6 +36,10 @@ pub enum Error {
         decoded: usize,
     },
     MultiplePayQrCodes(usize),
+    BySquareQrNotFound {
+        decoded: usize,
+    },
+    MultipleBySquareQrCodes(usize),
     Utf8(std::string::FromUtf8Error),
 }
 
@@ -93,6 +97,14 @@ impl fmt::Display for Error {
             Self::MultiplePayQrCodes(count) => write!(
                 formatter,
                 "image contains {count} valid PAY by square QR codes; expected exactly one"
+            ),
+            Self::BySquareQrNotFound { decoded } => write!(
+                formatter,
+                "decoded {decoded} QR codes, but none contains a valid by-square payload"
+            ),
+            Self::MultipleBySquareQrCodes(count) => write!(
+                formatter,
+                "image contains {count} valid by-square QR codes; expected exactly one"
             ),
             Self::Utf8(error) => write!(formatter, "payload sequence is not valid UTF-8: {error}"),
         }

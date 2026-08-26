@@ -6,10 +6,7 @@ use std::{
 
 #[cfg(feature = "qr-reader")]
 use bysqr::qr_reader;
-use bysqr::{
-    pay::{self, Pay},
-    qr,
-};
+use bysqr::{document, qr, Document};
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[path = "../preview.rs"]
@@ -123,8 +120,16 @@ fn read_source(source: &str) -> Result<String, io::Error> {
     }
 }
 
-fn deserialize_pay(source: &str) -> Result<Pay, Box<dyn Error>> {
-    Ok(pay::try_deserialize_pay(&read_source(source)?)?)
+fn deserialize_document(source: &str) -> Result<Document, Box<dyn Error>> {
+    Ok(document::try_deserialize(&read_source(source)?)?)
+}
+
+fn create_svg(document: &Document, payload: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+    match document {
+        Document::Pay(_) => Ok(qr::create_pay_svg(payload, qr::Theme::default())),
+        Document::Invoice(_) => Ok(qr::create_invoice_svg(payload)),
+        _ => Err(cli_error("this by-square document type cannot be rendered yet").into()),
+    }
 }
 
 fn run_encode(
@@ -136,9 +141,9 @@ fn run_encode(
     quality: u8,
     overwrite: bool,
 ) -> Result<(), Box<dyn Error>> {
-    let pay = deserialize_pay(source)?;
-    let encoded = pay::encode(&pay)?;
-    let svg_code = qr::create_pay_svg(&encoded, qr::Theme::default());
+    let document = deserialize_document(source)?;
+    let encoded = document.encode()?;
+    let svg_code = create_svg(&document, &encoded)?;
 
     if preview_requested {
         #[cfg(feature = "preview")]
@@ -186,25 +191,25 @@ fn run_encode(
 }
 
 fn run_decode(source: &str, format: &DataFormat) -> Result<(), Box<dyn Error>> {
-    let pay = decode_source(source)?;
+    let document = decode_source(source)?;
     let output = match format {
-        DataFormat::Json => serde_json::to_string_pretty(&pay)?,
-        DataFormat::Xml => quick_xml::se::to_string(&pay)?,
+        DataFormat::Json => document.to_json_pretty()?,
+        DataFormat::Xml => document.to_xml()?,
     };
     println!("{output}");
     Ok(())
 }
 
-fn decode_source(source: &str) -> Result<Pay, Box<dyn Error>> {
+fn decode_source(source: &str) -> Result<Document, Box<dyn Error>> {
     let path = Path::new(source);
     if !path.is_file() {
-        return Ok(pay::decode(source.trim())?);
+        return Ok(document::decode(source.trim())?);
     }
 
     let bytes = fs::read(path)?;
     if image::guess_format(&bytes).is_ok() {
         #[cfg(feature = "qr-reader")]
-        return Ok(qr_reader::decode_pay_from_bytes(&bytes)?);
+        return Ok(qr_reader::decode_document_from_bytes(&bytes)?);
 
         #[cfg(not(feature = "qr-reader"))]
         return Err(cli_error(
@@ -214,7 +219,7 @@ fn decode_source(source: &str) -> Result<Pay, Box<dyn Error>> {
     }
 
     let payload = String::from_utf8(bytes)?;
-    Ok(pay::decode(payload.trim())?)
+    Ok(document::decode(payload.trim())?)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
