@@ -48,17 +48,17 @@ enum Commands {
         #[arg(long = "overwrite")]
         overwrite: bool,
 
-        /// INVOICE logo composition from the official logo manual.
-        #[arg(long = "invoice-layout", value_enum)]
-        invoice_layout: Option<InvoiceLayoutArg>,
+        /// PAY or INVOICE logo composition from the official logo manual.
+        #[arg(long = "logo-layout", value_enum)]
+        logo_layout: Option<LogoLayoutArg>,
 
-        /// Position of the INVOICE branding around the QR matrix.
-        #[arg(long = "invoice-position", value_enum)]
-        invoice_position: Option<InvoicePositionArg>,
+        /// Position of the PAY or INVOICE branding around the QR matrix.
+        #[arg(long = "logo-position", value_enum)]
+        logo_position: Option<LogoPositionArg>,
 
-        /// Approved INVOICE branding color variation.
-        #[arg(long = "invoice-color", value_enum)]
-        invoice_color: Option<InvoiceColorArg>,
+        /// Approved family-specific PAY or INVOICE color variation.
+        #[arg(long = "logo-color", value_enum)]
+        logo_color: Option<LogoColorArg>,
     },
     Decode {
         #[arg(long = "src")]
@@ -76,13 +76,13 @@ enum DataFormat {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
-enum InvoiceLayoutArg {
+enum LogoLayoutArg {
     Print,
     Electronic,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
-enum InvoicePositionArg {
+enum LogoPositionArg {
     Bottom,
     Top,
     Left,
@@ -90,7 +90,7 @@ enum InvoicePositionArg {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
-enum InvoiceColorArg {
+enum LogoColorArg {
     Light,
     Dark,
     Gray,
@@ -117,7 +117,7 @@ struct EncodeOptions<'a> {
     size: u32,
     quality: u8,
     overwrite: bool,
-    invoice_theme: Option<qr::InvoiceTheme>,
+    logo_theme: Option<qr::LogoTheme>,
 }
 
 fn cli_error(message: impl Into<String>) -> io::Error {
@@ -168,34 +168,34 @@ fn deserialize_document(source: &str) -> Result<Document, Box<dyn Error>> {
     Ok(document::try_deserialize(&read_source(source)?)?)
 }
 
-fn invoice_theme(
-    layout: Option<InvoiceLayoutArg>,
-    position: Option<InvoicePositionArg>,
-    color: Option<InvoiceColorArg>,
-) -> Option<qr::InvoiceTheme> {
+fn logo_theme(
+    layout: Option<LogoLayoutArg>,
+    position: Option<LogoPositionArg>,
+    color: Option<LogoColorArg>,
+) -> Option<qr::LogoTheme> {
     if layout.is_none() && position.is_none() && color.is_none() {
         return None;
     }
 
-    let default = qr::InvoiceTheme::default();
-    Some(qr::InvoiceTheme::new(
+    let default = qr::LogoTheme::default();
+    Some(qr::LogoTheme::new(
         match layout {
-            Some(InvoiceLayoutArg::Print) => qr::LogoLayout::Print,
-            Some(InvoiceLayoutArg::Electronic) => qr::LogoLayout::Electronic,
+            Some(LogoLayoutArg::Print) => qr::LogoLayout::Print,
+            Some(LogoLayoutArg::Electronic) => qr::LogoLayout::Electronic,
             None => default.layout,
         },
         match position {
-            Some(InvoicePositionArg::Bottom) => qr::LogoPosition::Bottom,
-            Some(InvoicePositionArg::Top) => qr::LogoPosition::Top,
-            Some(InvoicePositionArg::Left) => qr::LogoPosition::Left,
-            Some(InvoicePositionArg::Right) => qr::LogoPosition::Right,
+            Some(LogoPositionArg::Bottom) => qr::LogoPosition::Bottom,
+            Some(LogoPositionArg::Top) => qr::LogoPosition::Top,
+            Some(LogoPositionArg::Left) => qr::LogoPosition::Left,
+            Some(LogoPositionArg::Right) => qr::LogoPosition::Right,
             None => default.position,
         },
         match color {
-            Some(InvoiceColorArg::Light) => qr::InvoiceColor::Light,
-            Some(InvoiceColorArg::Dark) => qr::InvoiceColor::Dark,
-            Some(InvoiceColorArg::Gray) => qr::InvoiceColor::Gray,
-            Some(InvoiceColorArg::Black) => qr::InvoiceColor::Black,
+            Some(LogoColorArg::Light) => qr::LogoColor::Light,
+            Some(LogoColorArg::Dark) => qr::LogoColor::Dark,
+            Some(LogoColorArg::Gray) => qr::LogoColor::Gray,
+            Some(LogoColorArg::Black) => qr::LogoColor::Black,
             None => default.color,
         },
     ))
@@ -204,21 +204,19 @@ fn invoice_theme(
 fn create_svg(
     document: &Document,
     payload: &str,
-    invoice_theme: Option<qr::InvoiceTheme>,
+    logo_theme: Option<qr::LogoTheme>,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     match document {
-        Document::Pay(_) if invoice_theme.is_none() => {
-            Ok(qr::create_pay_svg(payload, qr::Theme::default()))
-        }
+        Document::Pay(_) => Ok(qr::create_pay_svg(payload, logo_theme.unwrap_or_default())),
         Document::Invoice(_) => Ok(qr::create_invoice_svg_with_theme(
             payload,
-            invoice_theme.unwrap_or_default(),
+            logo_theme.unwrap_or_default(),
         )),
-        Document::InvoiceItems(_) if invoice_theme.is_none() => {
+        Document::InvoiceItems(_) if logo_theme.is_none() => {
             Ok(qr::create_invoice_items_svg(payload))
         }
-        Document::Pay(_) | Document::InvoiceItems(_) => Err(cli_error(
-            "--invoice-layout, --invoice-position and --invoice-color only apply to INVOICE documents",
+        Document::InvoiceItems(_) => Err(cli_error(
+            "--logo-layout, --logo-position and --logo-color only apply to PAY and INVOICE documents",
         )
         .into()),
         _ => Err(cli_error("this by-square document type cannot be rendered yet").into()),
@@ -228,7 +226,7 @@ fn create_svg(
 fn run_encode(source: &str, options: EncodeOptions<'_>) -> Result<(), Box<dyn Error>> {
     let document = deserialize_document(source)?;
     let encoded = document.encode()?;
-    let svg_code = create_svg(&document, &encoded, options.invoice_theme)?;
+    let svg_code = create_svg(&document, &encoded, options.logo_theme)?;
 
     if options.preview_requested {
         #[cfg(feature = "preview")]
@@ -322,9 +320,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             size,
             quality,
             overwrite,
-            invoice_layout,
-            invoice_position,
-            invoice_color,
+            logo_layout,
+            logo_position,
+            logo_color,
         }) => run_encode(
             src,
             EncodeOptions {
@@ -334,7 +332,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 size: *size,
                 quality: *quality,
                 overwrite: *overwrite,
-                invoice_theme: invoice_theme(*invoice_layout, *invoice_position, *invoice_color),
+                logo_theme: logo_theme(*logo_layout, *logo_position, *logo_color),
             },
         ),
         Some(Commands::Decode { src, format }) => run_decode(src, format),

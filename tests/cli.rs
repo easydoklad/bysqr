@@ -59,7 +59,7 @@ fn encodes_canonical_invoice_json_with_invoice_branding() {
 }
 
 #[test]
-fn applies_invoice_theme_options() {
+fn applies_logo_theme_options_to_invoice() {
     let source = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/invoice/schema/minimal-header-invoice.json"
@@ -71,11 +71,11 @@ fn applies_invoice_theme_options() {
             source,
             "--format",
             "svg",
-            "--invoice-layout",
+            "--logo-layout",
             "electronic",
-            "--invoice-position",
+            "--logo-position",
             "left",
-            "--invoice-color",
+            "--logo-color",
             "gray",
         ])
         .output()
@@ -93,7 +93,7 @@ fn applies_invoice_theme_options() {
 }
 
 #[test]
-fn rejects_invoice_theme_options_for_other_document_families() {
+fn applies_logo_theme_options_to_pay_with_the_pay_palette() {
     let source = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/pay/json/standing-order.json"
@@ -105,8 +105,42 @@ fn rejects_invoice_theme_options_for_other_document_families() {
             source,
             "--format",
             "svg",
-            "--invoice-color",
-            "black",
+            "--logo-layout",
+            "electronic",
+            "--logo-position",
+            "right",
+            "--logo-color",
+            "light",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let svg = String::from_utf8(output.stdout).unwrap();
+    assert!(svg.contains("viewBox=\"0 0 600 512\""));
+    assert!(svg.contains("#A1C7E9"));
+    assert!(!svg.contains("stroke-width=\"8\""));
+}
+
+#[test]
+fn rejects_logo_theme_options_for_invoice_items() {
+    let source = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/invoice-items/valid-interoperability-offline-mixed-lines.json"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        .args([
+            "encode",
+            "--src",
+            source,
+            "--format",
+            "svg",
+            "--logo-color",
+            "gray",
         ])
         .output()
         .unwrap();
@@ -114,7 +148,7 @@ fn rejects_invoice_theme_options_for_other_document_families() {
     assert!(!output.status.success());
     assert!(String::from_utf8(output.stderr)
         .unwrap()
-        .contains("only apply to INVOICE documents"));
+        .contains("only apply to PAY and INVOICE documents"));
 }
 
 #[test]
@@ -135,7 +169,7 @@ fn encodes_canonical_invoice_items_json_with_items_branding() {
     );
     let svg = String::from_utf8(output.stdout).unwrap();
     assert!(svg.starts_with("<svg"));
-    assert!(svg.contains("M52 540h5v29h-5z"));
+    assert!(svg.contains("M104.382 0C106.433"));
 }
 
 #[cfg(feature = "qr-reader")]
@@ -146,7 +180,7 @@ fn decodes_generated_qr_image_file() {
     let fixture = fixture();
     let pay = try_deserialize_pay(&fixture.source).unwrap();
     let payload = pay::encode(&pay).unwrap();
-    let svg = qr::create_pay_svg(&payload, qr::Theme::default());
+    let svg = qr::create_pay_svg(&payload, qr::LogoTheme::default());
     let png = qr::render_png(&svg, 1_024);
     let source = std::env::temp_dir().join(format!("bysqr-cli-pay-{}.png", std::process::id()));
     std::fs::write(&source, png).unwrap();
@@ -217,7 +251,7 @@ fn reports_disabled_qr_image_reader() {
     let fixture = fixture();
     let pay = try_deserialize_pay(&fixture.source).unwrap();
     let payload = pay::encode(&pay).unwrap();
-    let svg = qr::create_pay_svg(&payload, qr::Theme::default());
+    let svg = qr::create_pay_svg(&payload, qr::LogoTheme::default());
     let png = qr::render_png(&svg, 512);
     let source = std::env::temp_dir().join(format!("bysqr-cli-{}.png", std::process::id()));
     std::fs::write(&source, png).unwrap();

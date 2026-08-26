@@ -75,7 +75,7 @@ fn encode_source_to_svg(source: &str) -> Result<Vec<u8>, JsValue> {
     let document = try_deserialize(source).map_err(js_error)?;
     let encoded = document.encode().map_err(js_error)?;
     Ok(match document {
-        Document::Pay(_) => qr::create_pay_svg(&encoded, qr::Theme::default()),
+        Document::Pay(_) => qr::create_pay_svg(&encoded, qr::LogoTheme::default()),
         Document::Invoice(_) => qr::create_invoice_svg(&encoded),
         Document::InvoiceItems(_) => qr::create_invoice_items_svg(&encoded),
     })

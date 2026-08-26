@@ -4,7 +4,7 @@ use bysqr::{
     error::Error,
     invoice, invoice_items,
     pay::{self, try_deserialize_pay},
-    qr::{self, Theme},
+    qr::{self, LogoTheme},
     qr_reader, Document,
 };
 
@@ -15,7 +15,7 @@ fn fixture_pay() -> bysqr::pay::Pay {
 fn fixture_qr() -> (bysqr::pay::Pay, String, Vec<u8>) {
     let pay = fixture_pay();
     let payload = pay::encode(&pay).unwrap();
-    let svg = qr::create_pay_svg(&payload, Theme::default());
+    let svg = qr::create_pay_svg(&payload, LogoTheme::default());
     let png = qr::render_png(&svg, 1_024);
     (pay, payload, png)
 }
@@ -49,7 +49,7 @@ fn extracts_payload_and_decodes_generated_pay_png() {
 fn decodes_generated_pay_jpeg() {
     let expected = fixture_pay();
     let payload = pay::encode(&expected).unwrap();
-    let svg = qr::create_pay_svg(&payload, Theme::default());
+    let svg = qr::create_pay_svg(&payload, LogoTheme::default());
     let jpeg = qr::render_jpeg(&svg, 1_024, 95);
 
     assert_eq!(qr_reader::decode_pay_from_bytes(&jpeg).unwrap(), expected);
@@ -73,14 +73,35 @@ fn extracts_payload_and_decodes_generated_invoice_png() {
 }
 
 #[test]
+fn every_pay_theme_remains_scannable() {
+    let expected = fixture_pay();
+    let payload = pay::encode(&expected).unwrap();
+
+    for layout in qr::LogoLayout::ALL {
+        for position in qr::LogoPosition::ALL {
+            for color in qr::LogoColor::ALL {
+                let theme = qr::LogoTheme::new(layout, position, color);
+                let svg = qr::create_pay_svg(&payload, theme);
+                let png = qr::render_png(&svg, 1_024);
+                assert_eq!(
+                    qr_reader::decode_document_from_bytes(&png).unwrap(),
+                    Document::Pay(expected.clone()),
+                    "failed to scan {theme:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn every_invoice_theme_remains_scannable() {
     let expected = fixture_invoice();
     let payload = invoice::encode(&expected).unwrap();
 
     for layout in qr::LogoLayout::ALL {
         for position in qr::LogoPosition::ALL {
-            for color in qr::InvoiceColor::ALL {
-                let theme = qr::InvoiceTheme::new(layout, position, color);
+            for color in qr::LogoColor::ALL {
+                let theme = qr::LogoTheme::new(layout, position, color);
                 let svg = qr::create_invoice_svg_with_theme(&payload, theme);
                 let png = qr::render_png(&svg, 1_024);
                 assert_eq!(
@@ -151,7 +172,7 @@ fn distinguishes_image_qr_and_pay_errors() {
         Err(Error::QrNotFound)
     ));
 
-    let svg = qr::create_pay_svg("HELLO", Theme::default());
+    let svg = qr::create_pay_svg("HELLO", LogoTheme::default());
     let png = qr::render_png(&svg, 1_024);
     assert!(matches!(
         qr_reader::decode_pay_from_bytes(&png),

@@ -105,24 +105,26 @@ limits are enforced.
 To save generated QR code as image, use `--save` option with path where to save the image. Type of the file is
 determined by the output file extension. We support generating `svg`, `png` and `jpeg` images.
 
-#### INVOICE visual themes
+#### PAY and INVOICE visual themes
 
-INVOICE QR output supports every composition documented by the by-square logo
-manual: print or electronic layout, branding at the bottom, top, left or right,
-and the light orange, dark orange, gray or black color variation. The default is
-the dark-orange print layout with bottom branding.
+PAY and INVOICE QR output support every composition documented by the by-square
+logo manual: print or electronic layout, branding at the bottom, top, left or
+right, and light, dark, gray or black color variations. Light and dark map to
+the approved family palette: blue for PAY and orange for INVOICE. Both families
+default to the dark print layout with bottom branding.
 
 ```shell
 bysqr encode --src invoice.json --save invoice.svg \
-  --invoice-layout electronic \
-  --invoice-position left \
-  --invoice-color gray
+  --logo-layout electronic \
+  --logo-position left \
+  --logo-color gray
 ```
 
 These are constrained presets, rather than arbitrary styling controls. The QR
-matrix remains black on white, the four-module quiet area is preserved, and
-custom colors or altered logo proportions are intentionally not presented as
-logo-manual-compliant output.
+matrix remains black on white, and custom colors or altered logo proportions
+are intentionally not presented as logo-manual-compliant output. INVOICE ITEMS
+intentionally has no theme options and uses the generator-compatible black
+composition.
 
 #### QR code preview
 
@@ -238,30 +240,34 @@ assert!(matches!(bysqr::decode(&payload)?, Document::Invoice(_)));
 # Ok::<(), bysqr::error::Error>(())
 ```
 
-Logo-manual-compliant INVOICE rendering is available through a typed theme:
+Logo-manual-compliant PAY and INVOICE rendering uses the same closed semantic
+theme type. The renderer selects the approved family-specific palette:
 
 ```rust
 use bysqr::qr::{
-    create_invoice_svg_with_theme, InvoiceColor, InvoiceTheme, LogoLayout,
-    LogoPosition,
+    create_invoice_svg_with_theme, create_pay_svg, LogoColor, LogoLayout,
+    LogoPosition, LogoTheme,
 };
 
-let theme = InvoiceTheme::new(
+let theme = LogoTheme::new(
     LogoLayout::Electronic,
     LogoPosition::Right,
-    InvoiceColor::Black,
+    LogoColor::Black,
 );
-let svg = create_invoice_svg_with_theme(&payload, theme);
+let pay_svg = create_pay_svg(&pay_payload, theme);
+let invoice_svg = create_invoice_svg_with_theme(&invoice_payload, theme);
 ```
 
-`LogoLayout::ALL`, `LogoPosition::ALL` and `InvoiceColor::ALL` expose the full
+`LogoLayout::ALL`, `LogoPosition::ALL` and `LogoColor::ALL` expose the full
 2 × 4 × 4 preset matrix. A deterministic visual gallery can be generated with:
 
 ```shell
-cargo run --example invoice_theme_gallery
+cargo run --example theme_gallery
 ```
 
-The resulting `target/invoice-theme-gallery.html` contains all 32 variants.
+The resulting `target/theme-gallery.html` compares PAY and INVOICE across all
+32 variants. No public API accepts arbitrary colors; INVOICE ITEMS remains
+fixed to its black composition.
 
 INVOICE ITEMS exposes both individual-block and complete-list APIs. The
 convenience encoder follows the specification's conservative recommendation of
