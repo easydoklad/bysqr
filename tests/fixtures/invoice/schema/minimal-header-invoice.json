@@ -1,0 +1,46 @@
+{
+  "DocumentType": "Invoice",
+  "InvoiceID": "INV-2026-1",
+  "IssueDate": "2026-08-26",
+  "LocalCurrencyCode": "EUR",
+  "SupplierParty": {
+    "PartyName": "Example Supplier",
+    "CompanyTaxID": "2020000001",
+    "CompanyVATID": "SK2020000001",
+    "CompanyRegisterID": "12345678",
+    "PostalAddress": {
+      "StreetName": "Main Street",
+      "BuildingNumber": "1",
+      "CityName": "Bratislava",
+      "PostalZone": "81101",
+      "Country": "SVK"
+    },
+    "Contact": {
+      "Name": "Billing",
+      "Telephone": "+42190000000",
+      "EMail": "billing@example.test"
+    }
+  },
+  "CustomerParty": {
+    "PartyName": "Example Customer",
+    "PartyIdentification": "CUSTOMER-1"
+  },
+  "NumberOfInvoiceLines": 0,
+  "InvoiceDescription": "Consulting services",
+  "TaxCategorySummaries": {
+    "TaxCategorySummary": [
+      {
+        "ClassifiedTaxCategory": "0.2",
+        "TaxExclusiveAmount": "100",
+        "TaxAmount": "20",
+        "AlreadyClaimedTaxExclusiveAmount": "0",
+        "AlreadyClaimedTaxAmount": "0"
+      }
+    ]
+  },
+  "MonetarySummary": {
+    "PayableRoundingAmount": "0",
+    "PaidDepositsAmount": "0"
+  },
+  "PaymentMeans": "moneyTransfer cash"
+}

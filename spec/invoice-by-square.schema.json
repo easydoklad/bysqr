@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/easydoklad/bysqr/main/spec/invoice-by-square.schema.json",
+  "title": "INVOICE by square",
+  "description": "Canonical PascalCase JSON representation of an Invoice document from spec/bysquare.xsd (by-square type 1, version 0). Decimal values are lossless canonical strings.",
+  "$comment": "Properties marked readOnly are bsqr:computed=true. They may be returned by an explicit calculation API but are not transported in the QR sequence. Every bsqr:maxLength annotation is advisory and is recorded in descriptions instead of a rejecting JSON maxLength keyword.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "DocumentType": { "$ref": "#/$defs/DocumentType" },
+    "InvoiceID": {
+      "type": "string",
+      "description": "Unique invoice identifier. Advisory QR-sequence bsqr:maxLength: 10."
+    },
+    "IssueDate": {
+      "$ref": "#/$defs/Date",
+      "description": "Invoice issue date. Advisory QR-sequence bsqr:maxLength: 8."
+    },
+    "TaxPointDate": {
+      "$ref": "#/$defs/Date",
+      "description": "Tax point or delivery date. Advisory QR-sequence bsqr:maxLength: 8."
+    },
+    "OrderID": {
+      "type": "string",
+      "description": "Primary order identifier. Advisory QR-sequence bsqr:maxLength: 10."
+    },
+    "DeliveryNoteID": {
+      "type": "string",
+      "description": "Primary delivery-note identifier. Advisory QR-sequence bsqr:maxLength: 10."
+    },
+    "LocalCurrencyCode": {
+      "$ref": "#/$defs/CurrencyCode",
+      "description": "Local ISO 4217 currency. Advisory QR-sequence bsqr:maxLength: 3."
+    },
+    "ForeignCurrencyCode": {
+      "$ref": "#/$defs/CurrencyCode",
+      "description": "Foreign ISO 4217 currency. Advisory QR-sequence bsqr:maxLength: 3; all invoice amounts then use this currency."
+    },
+    "CurrRate": {
+      "$ref": "#/$defs/Decimal",
+      "description": "Direct foreign-to-local exchange rate. Advisory QR-sequence bsqr:maxLength: 15."
+    },
+    "ReferenceCurrRate": {
+      "$ref": "#/$defs/Decimal",
+      "description": "Reference local-to-foreign exchange rate. Advisory QR-sequence bsqr:maxLength: 15."
+    },
+    "SupplierParty": { "$ref": "#/$defs/SupplierParty" },
+    "CustomerParty": { "$ref": "#/$defs/CustomerParty" },
+    "NumberOfInvoiceLines": {
+      "type": "integer",
+      "description": "Invoice line count; zero denotes a header-only invoice. Advisory QR-sequence bsqr:maxLength: 11."
+    },
+    "InvoiceDescription": {
+      "type": "string",
+      "description": "General description for a multi-line or header-only invoice. Advisory QR-sequence bsqr:maxLength: 30."
+    },
+    "SingleInvoiceLine": { "$ref": "#/$defs/SingleInvoiceLine" },
+    "TaxCategorySummaries": { "$ref": "#/$defs/TaxCategorySummaries" },
+    "MonetarySummary": { "$ref": "#/$defs/MonetarySummary" },
+    "PaymentMeans": { "$ref": "#/$defs/PaymentMeans" }
+  },
+  "required": [
+    "DocumentType",
+    "InvoiceID",
+    "IssueDate",
+    "LocalCurrencyCode",
+    "SupplierParty",
+    "CustomerParty",
+    "TaxCategorySummaries",
+    "MonetarySummary"
+  ],
+  "dependentRequired": {
+    "ForeignCurrencyCode": ["CurrRate", "ReferenceCurrRate"],
+    "CurrRate": ["ForeignCurrencyCode", "ReferenceCurrRate"],
+    "ReferenceCurrRate": ["ForeignCurrencyCode", "CurrRate"]
+  },
+  "oneOf": [
+    {
+      "required": ["NumberOfInvoiceLines"],
+      "not": { "required": ["SingleInvoiceLine"] }
+    },
+    {
+      "required": ["SingleInvoiceLine"],
+      "not": {
+        "anyOf": [
+          { "required": ["NumberOfInvoiceLines"] },
+          { "required": ["InvoiceDescription"] }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "DocumentType": {
+      "type": "string",
+      "description": "Semantic document type. XML represents the same value as xsi:type; header classifiers are 0 through 4 in this order.",
+      "enum": [
+        "Invoice",
+        "ProformaInvoice",
+        "CreditNote",
+        "DebitNote",
+        "AdvanceInvoice"
+      ]
+    },
+    "Decimal": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*(?:\\.[0-9]*[1-9])?|0\\.[0-9]*[1-9]|-[1-9][0-9]*(?:\\.[0-9]*[1-9])?|-0\\.[0-9]*[1-9])$",
+      "description": "Lossless canonical XSD decimal string: no plus sign, exponent, redundant leading zeroes, trailing fractional zeroes, or negative zero. Individual QR fields carrying decimals have an advisory bsqr:maxLength of 15."
+    },
+    "Percentage": {
+      "type": "string",
+      "pattern": "^(?:0|1|0\\.[0-9]*[1-9])$",
+      "description": "Canonical VAT rate in the hard XSD range [0,1], for example 0.2 for 20%. Advisory QR-sequence bsqr:maxLength: 15."
+    },
+    "Date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Canonical ISO 8601 calendar date in YYYY-MM-DD form."
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "Three-letter ISO 4217 code."
+    },
+    "CountryCode": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "Three-letter ISO 3166 code."
+    },
+    "PaymentMeans": {
+      "type": "string",
+      "pattern": "^(?:moneyTransfer(?: cash)?(?: cashOnDelivery)?(?: creditCard)?(?: advance)?(?: mutualOffset)?(?: other)?|cash(?: cashOnDelivery)?(?: creditCard)?(?: advance)?(?: mutualOffset)?(?: other)?|cashOnDelivery(?: creditCard)?(?: advance)?(?: mutualOffset)?(?: other)?|creditCard(?: advance)?(?: mutualOffset)?(?: other)?|advance(?: mutualOffset)?(?: other)?|mutualOffset(?: other)?|other)$",
+      "description": "One or more XSD PaymentMean enum values, space-separated in canonical classifier order. Advisory QR-sequence bsqr:maxLength: 3 for the encoded bit classifier."
+    },
+    "SupplierParty": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "PartyName": {
+          "type": "string",
+          "description": "Supplier name. Advisory QR-sequence bsqr:maxLength: 20."
+        },
+        "CompanyTaxID": {
+          "type": "string",
+          "description": "Supplier tax ID. Advisory QR-sequence bsqr:maxLength: 12."
+        },
+        "CompanyVATID": {
+          "type": "string",
+          "description": "Supplier VAT ID. Advisory QR-sequence bsqr:maxLength: 14."
+        },
+        "CompanyRegisterID": {
+          "type": "string",
+          "description": "Supplier company-register ID. Advisory QR-sequence bsqr:maxLength: 14."
+        },
+        "PostalAddress": { "$ref": "#/$defs/PostalAddress" },
+        "Contact": { "$ref": "#/$defs/Contact" }
+      },
+      "required": ["PartyName", "PostalAddress"]
+    },
+    "CustomerParty": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "PartyName": {
+          "type": "string",
+          "description": "Customer name. Advisory QR-sequence bsqr:maxLength: 20."
+        },
+        "CompanyTaxID": {
+          "type": "string",
+          "description": "Customer tax ID. Advisory QR-sequence bsqr:maxLength: 12."
+        },
+        "CompanyVATID": {
+          "type": "string",
+          "description": "Customer VAT ID. Advisory QR-sequence bsqr:maxLength: 14."
+        },
+        "CompanyRegisterID": {
+          "type": "string",
+          "description": "Customer company-register ID. Advisory QR-sequence bsqr:maxLength: 14."
+        },
+        "PartyIdentification": {
+          "type": "string",
+          "description": "Customer identifier in the supplier's accounting system. Advisory QR-sequence bsqr:maxLength: 20."
+        }
+      },
+      "required": ["PartyName"]
+    },
+    "PostalAddress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "StreetName": {
+          "type": "string",
+          "description": "Street name. Advisory QR-sequence bsqr:maxLength: 20."
+        },
+        "BuildingNumber": {
+          "type": "string",
+          "description": "Building number. Advisory QR-sequence bsqr:maxLength: 3."
+        },
+        "CityName": {
+          "type": "string",
+          "description": "City. Advisory QR-sequence bsqr:maxLength: 20."
+        },
+        "PostalZone": {
+          "type": "string",
+          "description": "Postal code. Advisory QR-sequence bsqr:maxLength: 10."
+        },
+        "State": {
+          "type": "string",
+          "description": "State within a federation. Advisory QR-sequence bsqr:maxLength: 10."
+        },
+        "Country": { "$ref": "#/$defs/CountryCode" }
+      },
+      "required": ["StreetName", "CityName", "PostalZone", "Country"]
+    },
+    "Contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": {
+          "type": "string",
+          "description": "Contact person or department. Advisory QR-sequence bsqr:maxLength: 20."
+        },
+        "Telephone": {
+          "type": "string",
+          "description": "Telephone number. Advisory QR-sequence bsqr:maxLength: 12."
+        },
+        "EMail": {
+          "type": "string",
+          "description": "Email address. Advisory QR-sequence bsqr:maxLength: 40."
+        }
+      }
+    },
+    "SingleInvoiceLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "OrderLineID": {
+          "type": "string",
+          "description": "Order-line identifier. Advisory QR-sequence bsqr:maxLength: 10."
+        },
+        "DeliveryNoteLineID": {
+          "type": "string",
+          "description": "Delivery-note-line identifier. Advisory QR-sequence bsqr:maxLength: 10."
+        },
+        "ItemName": {
+          "type": "string",
+          "description": "Item name or description. Advisory QR-sequence bsqr:maxLength: 30."
+        },
+        "ItemEANCode": {
+          "type": "string",
+          "description": "Item EAN code. Advisory QR-sequence bsqr:maxLength: 30."
+        },
+        "PeriodFromDate": {
+          "$ref": "#/$defs/Date",
+          "description": "Billing-period start. Advisory QR-sequence bsqr:maxLength: 8."
+        },
+        "PeriodToDate": {
+          "$ref": "#/$defs/Date",
+          "description": "Billing-period end. Advisory QR-sequence bsqr:maxLength: 8."
+        },
+        "InvoicedQuantity": {
+          "$ref": "#/$defs/Decimal",
+          "description": "Invoiced quantity. Advisory QR-sequence bsqr:maxLength: 15."
+        },
+        "UnitPriceTaxExclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed as MonetarySummary TaxExclusiveAmount divided by InvoicedQuantity; not transported."
+        },
+        "UnitPriceTaxInclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed as MonetarySummary TaxInclusiveAmount divided by InvoicedQuantity; not transported."
+        },
+        "UnitPriceTaxAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed as MonetarySummary TaxAmount divided by InvoicedQuantity; not transported."
+        }
+      },
+      "required": ["InvoicedQuantity"],
+      "dependentRequired": {
+        "PeriodFromDate": ["PeriodToDate"],
+        "PeriodToDate": ["PeriodFromDate"]
+      },
+      "oneOf": [
+        {
+          "required": ["ItemName"],
+          "not": { "required": ["ItemEANCode"] }
+        },
+        {
+          "required": ["ItemEANCode"],
+          "not": { "required": ["ItemName"] }
+        }
+      ]
+    },
+    "TaxCategorySummaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "TaxCategorySummary": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/TaxCategorySummary" }
+        }
+      },
+      "required": ["TaxCategorySummary"]
+    },
+    "TaxCategorySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ClassifiedTaxCategory": { "$ref": "#/$defs/Percentage" },
+        "TaxExclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "description": "Tax-exclusive amount. Advisory QR-sequence bsqr:maxLength: 15."
+        },
+        "TaxInclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed as TaxExclusiveAmount plus TaxAmount; not transported."
+        },
+        "TaxAmount": {
+          "$ref": "#/$defs/Decimal",
+          "description": "VAT amount. Advisory QR-sequence bsqr:maxLength: 15."
+        },
+        "AlreadyClaimedTaxExclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "description": "Already-claimed tax-exclusive deposit amount. Advisory QR-sequence bsqr:maxLength: 15."
+        },
+        "AlreadyClaimedTaxInclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed as AlreadyClaimedTaxExclusiveAmount plus AlreadyClaimedTaxAmount; not transported."
+        },
+        "AlreadyClaimedTaxAmount": {
+          "$ref": "#/$defs/Decimal",
+          "description": "VAT on already-claimed deposits. Advisory QR-sequence bsqr:maxLength: 15."
+        },
+        "DifferenceTaxExclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed tax-exclusive difference; not transported."
+        },
+        "DifferenceTaxInclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed tax-inclusive difference; not transported."
+        },
+        "DifferenceTaxAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed VAT difference; not transported."
+        }
+      },
+      "required": [
+        "ClassifiedTaxCategory",
+        "TaxExclusiveAmount",
+        "TaxAmount",
+        "AlreadyClaimedTaxExclusiveAmount",
+        "AlreadyClaimedTaxAmount"
+      ]
+    },
+    "MonetarySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "TaxExclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category TaxExclusiveAmount values; not transported."
+        },
+        "TaxInclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category TaxInclusiveAmount values; not transported."
+        },
+        "TaxAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category TaxAmount values; not transported."
+        },
+        "AlreadyClaimedTaxExclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category AlreadyClaimedTaxExclusiveAmount values; not transported."
+        },
+        "AlreadyClaimedTaxInclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category AlreadyClaimedTaxInclusiveAmount values; not transported."
+        },
+        "AlreadyClaimedTaxAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category AlreadyClaimedTaxAmount values; not transported."
+        },
+        "DifferenceTaxExclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category DifferenceTaxExclusiveAmount values; not transported."
+        },
+        "DifferenceTaxInclusiveAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category DifferenceTaxInclusiveAmount values; not transported."
+        },
+        "DifferenceTaxAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed sum of category DifferenceTaxAmount values; not transported."
+        },
+        "PayableRoundingAmount": {
+          "$ref": "#/$defs/Decimal",
+          "description": "Rounding adjustment added to the payable amount. Advisory QR-sequence bsqr:maxLength: 15."
+        },
+        "PaidDepositsAmount": {
+          "$ref": "#/$defs/Decimal",
+          "description": "Paid untaxed deposits. Advisory QR-sequence bsqr:maxLength: 15."
+        },
+        "PayableAmount": {
+          "$ref": "#/$defs/Decimal",
+          "readOnly": true,
+          "description": "Computed as DifferenceTaxInclusiveAmount minus PaidDepositsAmount plus PayableRoundingAmount; not transported."
+        }
+      },
+      "required": ["PayableRoundingAmount", "PaidDepositsAmount"]
+    }
+  }
+}

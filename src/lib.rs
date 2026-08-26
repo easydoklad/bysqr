@@ -6,6 +6,7 @@ use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
 pub mod codec;
 pub mod document;
 pub mod error;
+pub mod invoice;
 pub mod pay;
 pub mod qr;
 #[cfg(feature = "qr-reader")]
