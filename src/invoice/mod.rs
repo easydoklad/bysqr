@@ -1,6 +1,8 @@
+pub mod decode;
 pub mod encode;
 pub mod models;
 
+pub use decode::{decode, decode_sequence};
 pub use encode::{
     encode, encode_sequence, encode_sequence_with_limit, encode_with_limit, SequenceLimit,
     MAX_SEQUENCE_CHARACTERS,
