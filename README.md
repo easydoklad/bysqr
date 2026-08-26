@@ -125,12 +125,30 @@ bysqr encode --src payment.xml --format jpeg --quality 95
 The decoder accepts the Base32hex content carried by the QR code and prints a
 PAY document as canonical JSON or XML. JSON output conforms to
 [`spec/pay-by-square.schema.json`](spec/pay-by-square.schema.json). The decoder
-evaluates the data payload; scanning an image is outside its scope.
+evaluates the text payload directly; optional raster image scanning is described
+below.
 
 ```shell
 bysqr decode --src '000620000...' --format json
 bysqr decode --src payload.txt --format xml
 ```
+
+### Decoding a QR image
+
+Raster image reading is optional so applications that already use their own QR
+scanner do not need to compile another one. Enable it with the `qr-reader`
+feature:
+
+```shell
+cargo build --release --features qr-reader
+bysqr decode --src payment.png --format json
+bysqr decode --src payment.jpg --format xml
+```
+
+The lower-level `qr_reader::extract_payloads_from_bytes` API returns the text
+from every detected QR code. `qr_reader::decode_pay_from_bytes` additionally
+selects and validates exactly one PAY payload. PNG and JPEG decoding are covered
+by the end-to-end test suite.
 
 ## Build
 
@@ -171,6 +189,10 @@ use `encoder::encode_with_limit(pay, encoder::SequenceLimit::Unbounded)`. This
 mode never silently drops fields; the protocol-level 16-bit payload limit still
 applies.
 
+With the `qr-reader` feature enabled, Rust consumers can pass raster bytes to
+`qr_reader::decode_pay_from_bytes`. Without it they can feed text from any
+external scanner directly to `decoder::decode`.
+
 ## Tests
 
 Run the complete suite with:
@@ -198,10 +220,20 @@ cargo install wasm-pack
 After installing, you can start build:
 
 ```shell
-wasm-pack build --target web
+wasm-pack build --target web --features wasm
 ```
 
 Built wasm module will be located in `pkg` folder.
+
+To include raster QR reading, enable both features:
+
+```shell
+wasm-pack build --target web --features wasm,qr-reader
+```
+
+This additionally exports `decode_image_to_json` and `decode_image_to_xml`,
+which accept PNG or JPEG bytes. The text-only `decode_to_json` and
+`decode_to_xml` exports remain available without the QR reader.
 
 #### Building for wasm on Ubuntu
 
@@ -236,6 +268,7 @@ llvm-config --version
 - [x] PAY decoder
 - [x] PAY JSON input/output and JSON Schema
 - [x] PAY QR and unbounded sequence-length policies
+- [x] optional PAY QR image reader
 - [ ] Invoice encoder
 - [ ] Invoice decoder
 - [ ] theming

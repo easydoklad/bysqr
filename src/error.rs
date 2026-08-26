@@ -29,6 +29,13 @@ pub enum Error {
         format: &'static str,
         message: String,
     },
+    ImageDecode(String),
+    QrNotFound,
+    QrDecode(String),
+    PayQrNotFound {
+        decoded: usize,
+    },
+    MultiplePayQrCodes(usize),
     Utf8(std::string::FromUtf8Error),
 }
 
@@ -76,6 +83,17 @@ impl fmt::Display for Error {
             Self::Deserialize { format, message } => {
                 write!(formatter, "unable to deserialize {format}: {message}")
             }
+            Self::ImageDecode(message) => write!(formatter, "unable to decode image: {message}"),
+            Self::QrNotFound => formatter.write_str("image does not contain a detectable QR code"),
+            Self::QrDecode(message) => write!(formatter, "unable to decode QR code: {message}"),
+            Self::PayQrNotFound { decoded } => write!(
+                formatter,
+                "decoded {decoded} QR codes, but none contains a valid PAY by square payload"
+            ),
+            Self::MultiplePayQrCodes(count) => write!(
+                formatter,
+                "image contains {count} valid PAY by square QR codes; expected exactly one"
+            ),
             Self::Utf8(error) => write!(formatter, "payload sequence is not valid UTF-8: {error}"),
         }
     }

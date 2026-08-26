@@ -9,6 +9,8 @@ pub mod encoder;
 pub mod error;
 pub mod models;
 pub mod qr;
+#[cfg(feature = "qr-reader")]
+pub mod qr_reader;
 
 /// Canonical PAY JSON Schema (Draft 2020-12), derived from `bysquare.xsd`.
 pub const PAY_JSON_SCHEMA: &str = include_str!("../spec/pay-by-square.schema.json");
@@ -51,6 +53,20 @@ pub fn decode_to_json(payload: &str) -> Result<String, JsValue> {
 #[wasm_bindgen]
 pub fn decode_to_xml(payload: &str) -> Result<String, JsValue> {
     let pay = decoder::decode(payload.trim()).map_err(js_error)?;
+    quick_xml::se::to_string(&pay).map_err(js_error)
+}
+
+#[cfg(all(feature = "wasm", feature = "qr-reader"))]
+#[wasm_bindgen]
+pub fn decode_image_to_json(image: &[u8]) -> Result<String, JsValue> {
+    let pay = qr_reader::decode_pay_from_bytes(image).map_err(js_error)?;
+    serde_json::to_string_pretty(&pay).map_err(js_error)
+}
+
+#[cfg(all(feature = "wasm", feature = "qr-reader"))]
+#[wasm_bindgen]
+pub fn decode_image_to_xml(image: &[u8]) -> Result<String, JsValue> {
+    let pay = qr_reader::decode_pay_from_bytes(image).map_err(js_error)?;
     quick_xml::se::to_string(&pay).map_err(js_error)
 }
 

@@ -4,6 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[cfg(feature = "qr-reader")]
+use bysqr::qr_reader;
 use bysqr::{
     decoder, encoder,
     models::{try_deserialize_pay, Pay},
@@ -185,14 +187,35 @@ fn run_encode(
 }
 
 fn run_decode(source: &str, format: &DataFormat) -> Result<(), Box<dyn Error>> {
-    let payload = read_source(source)?;
-    let pay = decoder::decode(payload.trim())?;
+    let pay = decode_source(source)?;
     let output = match format {
         DataFormat::Json => serde_json::to_string_pretty(&pay)?,
         DataFormat::Xml => quick_xml::se::to_string(&pay)?,
     };
     println!("{output}");
     Ok(())
+}
+
+fn decode_source(source: &str) -> Result<Pay, Box<dyn Error>> {
+    let path = Path::new(source);
+    if !path.is_file() {
+        return Ok(decoder::decode(source.trim())?);
+    }
+
+    let bytes = fs::read(path)?;
+    if image::guess_format(&bytes).is_ok() {
+        #[cfg(feature = "qr-reader")]
+        return Ok(qr_reader::decode_pay_from_bytes(&bytes)?);
+
+        #[cfg(not(feature = "qr-reader"))]
+        return Err(cli_error(
+            "QR image decoding is unavailable; rebuild with the qr-reader feature",
+        )
+        .into());
+    }
+
+    let payload = String::from_utf8(bytes)?;
+    Ok(decoder::decode(payload.trim())?)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
