@@ -2,7 +2,7 @@
 
 use bysqr::{
     error::Error,
-    invoice,
+    invoice, invoice_items,
     pay::{self, try_deserialize_pay},
     qr::{self, Theme},
     qr_reader, Document,
@@ -23,6 +23,13 @@ fn fixture_qr() -> (bysqr::pay::Pay, String, Vec<u8>) {
 fn fixture_invoice() -> invoice::Invoice {
     invoice::try_deserialize_invoice(include_str!(
         "fixtures/invoice/schema/minimal-header-invoice.json"
+    ))
+    .unwrap()
+}
+
+fn fixture_invoice_items() -> invoice_items::InvoiceItems {
+    invoice_items::try_deserialize_invoice_items(include_str!(
+        "fixtures/invoice-items/valid-interoperability-offline-mixed-lines.json"
     ))
     .unwrap()
 }
@@ -63,6 +70,51 @@ fn extracts_payload_and_decodes_generated_invoice_png() {
         qr_reader::decode_document_from_bytes(&png).unwrap(),
         Document::Invoice(Box::new(expected))
     );
+}
+
+#[test]
+fn extracts_payload_and_decodes_generated_invoice_items_png() {
+    let expected = fixture_invoice_items();
+    let payload = invoice_items::encode(&expected).unwrap();
+    let svg = qr::create_invoice_items_svg(&payload);
+    let png = qr::render_png(&svg, 1_024);
+
+    assert_eq!(
+        qr_reader::extract_payloads_from_bytes(&png).unwrap(),
+        vec![payload]
+    );
+    assert_eq!(
+        qr_reader::decode_document_from_bytes(&png).unwrap(),
+        Document::InvoiceItems(Box::new(expected))
+    );
+}
+
+#[test]
+fn scans_and_reassembles_two_invoice_items_codes_from_one_image() {
+    let payloads = [
+        include_str!(
+            "fixtures/invoice-items/valid-interoperability-offline-multi-qr-9.payload.txt"
+        )
+        .trim(),
+        include_str!(
+            "fixtures/invoice-items/valid-interoperability-offline-multi-qr-1.payload.txt"
+        )
+        .trim(),
+    ];
+    let rendered = payloads.map(|payload| {
+        let svg = qr::create_invoice_items_svg(payload);
+        image::load_from_memory(&qr::render_png(&svg, 768))
+            .unwrap()
+            .to_rgba8()
+    });
+    let mut canvas = image::RgbaImage::new(1_536, 900);
+    image::imageops::overlay(&mut canvas, &rendered[0], 0, 0);
+    image::imageops::overlay(&mut canvas, &rendered[1], 768, 0);
+
+    let merged = qr_reader::decode_invoice_items(&image::DynamicImage::ImageRgba8(canvas)).unwrap();
+    assert_eq!(merged.invoice_id, "INV-ITEMS-NINE");
+    assert_eq!(merged.invoice_lines.len(), 9);
+    assert_eq!(merged.invoice_lines[0].item_name.as_deref(), Some("I1"));
 }
 
 #[test]

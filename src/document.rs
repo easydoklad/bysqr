@@ -7,7 +7,7 @@ use crate::{
     codec::{self, Header},
     error::{Error, Result},
     invoice::{self, DocumentType},
-    pay,
+    invoice_items, pay,
 };
 
 /// A by-square document decoded from data or a QR payload.
@@ -17,6 +17,7 @@ use crate::{
 pub enum Document {
     Pay(pay::Pay),
     Invoice(Box<invoice::Invoice>),
+    InvoiceItems(Box<invoice_items::InvoiceItems>),
 }
 
 impl Document {
@@ -25,6 +26,7 @@ impl Document {
         match self {
             Self::Pay(pay) => pay::encode(pay),
             Self::Invoice(invoice) => invoice::encode(invoice),
+            Self::InvoiceItems(items) => invoice_items::encode(items),
         }
     }
 
@@ -47,6 +49,12 @@ impl Document {
                 format: "XML",
                 message: error.to_string(),
             }),
+            Self::InvoiceItems(items) => {
+                items.to_xml_string().map_err(|error| Error::Deserialize {
+                    format: "XML",
+                    message: error.to_string(),
+                })
+            }
         }
     }
 }
@@ -68,6 +76,14 @@ pub fn try_deserialize(source: &str) -> Result<Document> {
                     message: error.to_string(),
                 });
         }
+        if value.get("FirstInvoiceLineID").is_some() && value.get("InvoiceLines").is_some() {
+            return invoice_items::try_deserialize_invoice_items(source)
+                .map(|items| Document::InvoiceItems(Box::new(items)))
+                .map_err(|error| Error::Deserialize {
+                    format: "InvoiceItems JSON",
+                    message: error.to_string(),
+                });
+        }
         return pay::try_deserialize_pay(source).map(Document::Pay);
     }
 
@@ -78,6 +94,12 @@ pub fn try_deserialize(source: &str) -> Result<Document> {
                 .map(|invoice| Document::Invoice(Box::new(invoice)))
                 .map_err(|error| Error::Deserialize {
                     format: "Invoice XML",
+                    message: error.to_string(),
+                }),
+            "InvoiceItems" => invoice_items::try_deserialize_invoice_items(source)
+                .map(|items| Document::InvoiceItems(Box::new(items)))
+                .map_err(|error| Error::Deserialize {
+                    format: "InvoiceItems XML",
                     message: error.to_string(),
                 }),
             root => Err(Error::Unsupported(format!(
@@ -113,6 +135,18 @@ pub fn decode(payload: &str) -> Result<Document> {
             })?;
         return invoice::decode_sequence(&decoded.sequence, document_type)
             .map(|invoice| Document::Invoice(Box::new(invoice)));
+    }
+
+    if decoded.header
+        == (Header {
+            by_square_type: 2,
+            version: 0,
+            document_type: 0,
+            reserved: 0,
+        })
+    {
+        return invoice_items::decode_sequence(&decoded.sequence)
+            .map(|items| Document::InvoiceItems(Box::new(items)));
     }
 
     Err(Error::Unsupported(format!(

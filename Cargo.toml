@@ -2,7 +2,7 @@
 name = "bysqr"
 version = "0.0.1"
 edition = "2021"
-description = "PAY by square and INVOICE by square encoder and decoder"
+description = "PAY, INVOICE and INVOICE ITEMS by square encoder and decoder"
 license = "MIT"
 repository = "https://github.com/easydoklad/bysqr"
 readme = "README.md"

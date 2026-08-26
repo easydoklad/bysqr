@@ -35,6 +35,9 @@ pub enum Error {
     PayQrNotFound {
         decoded: usize,
     },
+    InvoiceItemsQrNotFound {
+        decoded: usize,
+    },
     MultiplePayQrCodes(usize),
     BySquareQrNotFound {
         decoded: usize,
@@ -93,6 +96,10 @@ impl fmt::Display for Error {
             Self::PayQrNotFound { decoded } => write!(
                 formatter,
                 "decoded {decoded} QR codes, but none contains a valid PAY by square payload"
+            ),
+            Self::InvoiceItemsQrNotFound { decoded } => write!(
+                formatter,
+                "decoded {decoded} QR codes, but none contains a valid INVOICE ITEMS by square payload"
             ),
             Self::MultiplePayQrCodes(count) => write!(
                 formatter,

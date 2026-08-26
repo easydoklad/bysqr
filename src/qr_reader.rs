@@ -11,6 +11,7 @@ use rqrr::PreparedImage;
 use crate::{
     document,
     error::{Error, Result},
+    invoice_items::{self, InvoiceItems, ReassembledInvoiceLines},
     pay::{self, Pay},
     Document,
 };
@@ -80,6 +81,21 @@ pub fn decode_document_from_bytes(bytes: &[u8]) -> Result<Document> {
     decode_document(&image)
 }
 
+/// Decode and reassemble all INVOICE ITEMS blocks found in one raster image.
+///
+/// Other QR families are ignored. Blocks may appear in any scan order, but
+/// must share an InvoiceID and form one gap-free sequence starting at line 1.
+pub fn decode_invoice_items(image: &DynamicImage) -> Result<ReassembledInvoiceLines> {
+    decode_invoice_items_payloads(extract_payloads(image)?)
+}
+
+/// Decode image bytes and reassemble every INVOICE ITEMS block they contain.
+pub fn decode_invoice_items_from_bytes(bytes: &[u8]) -> Result<ReassembledInvoiceLines> {
+    let image =
+        image::load_from_memory(bytes).map_err(|error| Error::ImageDecode(error.to_string()))?;
+    decode_invoice_items(&image)
+}
+
 fn decode_document_payloads(payloads: Vec<String>) -> Result<Document> {
     let decoded_count = payloads.len();
     let mut documents = payloads
@@ -124,9 +140,30 @@ fn decode_pay_payloads(payloads: Vec<String>) -> Result<Pay> {
     }
 }
 
+fn decode_invoice_items_payloads(payloads: Vec<String>) -> Result<ReassembledInvoiceLines> {
+    let decoded_count = payloads.len();
+    let mut documents = Vec::<InvoiceItems>::new();
+    for payload in &payloads {
+        let payload = payload.trim();
+        let Ok(decoded) = crate::codec::decode_payload(payload) else {
+            continue;
+        };
+        if decoded.header.by_square_type == 2 {
+            documents.push(invoice_items::decode(payload)?);
+        }
+    }
+    if documents.is_empty() {
+        return Err(Error::InvoiceItemsQrNotFound {
+            decoded: decoded_count,
+        });
+    }
+    invoice_items::reassemble_invoice_lines(documents)
+        .map_err(|error| Error::invalid(error.field(), error.message()))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{decode_document_payloads, decode_pay_payloads};
+    use super::{decode_document_payloads, decode_invoice_items_payloads, decode_pay_payloads};
     use crate::{error::Error, pay};
 
     fn valid_payload() -> String {
@@ -135,6 +172,19 @@ mod tests {
         ))
         .unwrap();
         pay::encode(&pay).unwrap()
+    }
+
+    fn valid_items_payload(name: &str) -> String {
+        let value = match name {
+            "first" => include_str!(
+                "../tests/fixtures/invoice-items/valid-interoperability-offline-multi-qr-1.payload.txt"
+            ),
+            "last" => include_str!(
+                "../tests/fixtures/invoice-items/valid-interoperability-offline-multi-qr-9.payload.txt"
+            ),
+            _ => unreachable!(),
+        };
+        value.trim().to_owned()
     }
 
     #[test]
@@ -170,6 +220,23 @@ mod tests {
         assert!(matches!(
             decode_document_payloads(vec![payload.clone(), payload]),
             Err(Error::MultipleBySquareQrCodes(2))
+        ));
+    }
+
+    #[test]
+    fn reassembles_invoice_items_and_ignores_other_qr_families() {
+        let merged = decode_invoice_items_payloads(vec![
+            valid_items_payload("last"),
+            valid_payload(),
+            valid_items_payload("first"),
+        ])
+        .unwrap();
+        assert_eq!(merged.invoice_id, "INV-ITEMS-NINE");
+        assert_eq!(merged.invoice_lines.len(), 9);
+
+        assert!(matches!(
+            decode_invoice_items_payloads(vec!["HELLO".to_owned(), valid_payload()]),
+            Err(Error::InvoiceItemsQrNotFound { decoded: 2 })
         ));
     }
 }

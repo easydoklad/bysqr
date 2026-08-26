@@ -5,6 +5,7 @@ pub mod codec;
 pub mod document;
 pub mod error;
 pub mod invoice;
+pub mod invoice_items;
 pub mod pay;
 pub mod qr;
 #[cfg(feature = "qr-reader")]
@@ -76,6 +77,7 @@ fn encode_source_to_svg(source: &str) -> Result<Vec<u8>, JsValue> {
     Ok(match document {
         Document::Pay(_) => qr::create_pay_svg(&encoded, qr::Theme::default()),
         Document::Invoice(_) => qr::create_invoice_svg(&encoded),
+        Document::InvoiceItems(_) => qr::create_invoice_items_svg(&encoded),
     })
 }
 

@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use bysqr::{
-    invoice,
+    invoice, invoice_items,
     pay::{try_deserialize_pay, Pay},
 };
 use serde::Deserialize;
@@ -56,6 +56,27 @@ fn encodes_canonical_invoice_json_with_invoice_branding() {
     let svg = String::from_utf8(output.stdout).unwrap();
     assert!(svg.starts_with("<svg"));
     assert!(svg.contains("#f78f1e"));
+}
+
+#[test]
+fn encodes_canonical_invoice_items_json_with_items_branding() {
+    let source = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/invoice-items/valid-interoperability-offline-mixed-lines.json"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        .args(["encode", "--src", source, "--format", "svg"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let svg = String::from_utf8(output.stdout).unwrap();
+    assert!(svg.starts_with("<svg"));
+    assert!(svg.contains("M52 540h5v29h-5z"));
 }
 
 #[cfg(feature = "qr-reader")]
@@ -215,5 +236,32 @@ fn decodes_invoice_payload_to_json_and_xml() {
                 .as_str(),
             "0.2"
         );
+    }
+}
+
+#[test]
+fn decodes_invoice_items_payload_to_json_and_xml() {
+    let payload = include_str!(
+        "fixtures/invoice-items/valid-interoperability-offline-mixed-lines.payload.txt"
+    )
+    .trim();
+
+    for format in ["json", "xml"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+            .args(["decode", "--src", payload, "--format", format])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let decoded = invoice_items::try_deserialize_invoice_items(
+            &String::from_utf8(output.stdout).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(decoded.invoice_id, "INV-MULTI-2026");
+        assert_eq!(decoded.invoice_lines.invoice_line.len(), 3);
     }
 }

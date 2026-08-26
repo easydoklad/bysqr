@@ -1,0 +1,64 @@
+{
+  "InvoiceID": "INV-ITEMS-NINE",
+  "FirstInvoiceLineID": "1",
+  "InvoiceLines": {
+    "InvoiceLine": [
+      {
+        "ItemName": "I1",
+        "InvoicedQuantity": "1",
+        "UnitPriceTaxExclusiveAmount": "1",
+        "UnitPriceTaxAmount": "0.23",
+        "ClassifiedTaxCategory": "0.23"
+      },
+      {
+        "ItemName": "I2",
+        "InvoicedQuantity": "2",
+        "UnitPriceTaxExclusiveAmount": "2",
+        "UnitPriceTaxAmount": "0.2",
+        "ClassifiedTaxCategory": "0.1"
+      },
+      {
+        "ItemEANCode": "8580000000003",
+        "InvoicedQuantity": "3",
+        "UnitPriceTaxExclusiveAmount": "3",
+        "UnitPriceTaxAmount": "0.69",
+        "ClassifiedTaxCategory": "0.23"
+      },
+      {
+        "ItemName": "I4",
+        "InvoicedQuantity": "4",
+        "UnitPriceTaxExclusiveAmount": "4",
+        "UnitPriceTaxAmount": "0.4",
+        "ClassifiedTaxCategory": "0.1"
+      },
+      {
+        "ItemName": "I5",
+        "InvoicedQuantity": "5",
+        "UnitPriceTaxExclusiveAmount": "5",
+        "UnitPriceTaxAmount": "1.15",
+        "ClassifiedTaxCategory": "0.23"
+      },
+      {
+        "ItemEANCode": "8580000000006",
+        "InvoicedQuantity": "6",
+        "UnitPriceTaxExclusiveAmount": "6",
+        "UnitPriceTaxAmount": "0.6",
+        "ClassifiedTaxCategory": "0.1"
+      },
+      {
+        "ItemName": "I7",
+        "InvoicedQuantity": "7",
+        "UnitPriceTaxExclusiveAmount": "7",
+        "UnitPriceTaxAmount": "1.61",
+        "ClassifiedTaxCategory": "0.23"
+      },
+      {
+        "ItemName": "I8",
+        "InvoicedQuantity": "8",
+        "UnitPriceTaxExclusiveAmount": "8",
+        "UnitPriceTaxAmount": "0.8",
+        "ClassifiedTaxCategory": "0.1"
+      }
+    ]
+  }
+}

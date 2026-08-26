@@ -1,0 +1,15 @@
+{
+  "InvoiceID": "INV-ITEMS-NINE",
+  "FirstInvoiceLineID": "9",
+  "InvoiceLines": {
+    "InvoiceLine": [
+      {
+        "ItemEANCode": "8580000000009",
+        "InvoicedQuantity": "9",
+        "UnitPriceTaxExclusiveAmount": "-9",
+        "UnitPriceTaxAmount": "-2.07",
+        "ClassifiedTaxCategory": "0.23"
+      }
+    ]
+  }
+}

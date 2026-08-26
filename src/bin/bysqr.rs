@@ -128,6 +128,7 @@ fn create_svg(document: &Document, payload: &str) -> Result<Vec<u8>, Box<dyn Err
     match document {
         Document::Pay(_) => Ok(qr::create_pay_svg(payload, qr::Theme::default())),
         Document::Invoice(_) => Ok(qr::create_invoice_svg(payload)),
+        Document::InvoiceItems(_) => Ok(qr::create_invoice_items_svg(payload)),
         _ => Err(cli_error("this by-square document type cannot be rendered yet").into()),
     }
 }

@@ -1,0 +1,45 @@
+{
+  "InvoiceID": "INV-MULTI-2026",
+  "FirstInvoiceLineID": "1",
+  "InvoiceLines": {
+    "InvoiceLine": [
+      {
+        "OrderReference": {
+          "OrderID": "ORDER-42",
+          "OrderLineID": "1"
+        },
+        "DeliveryNoteReference": {
+          "DeliveryNoteID": "DELIVERY-7",
+          "DeliveryNoteLineID": "A"
+        },
+        "ItemName": "Konzultačná služba",
+        "InvoicedQuantity": "2",
+        "UnitPriceTaxExclusiveAmount": "100",
+        "UnitPriceTaxAmount": "20",
+        "ClassifiedTaxCategory": "0.2"
+      },
+      {
+        "OrderReference": {
+          "OrderID": "ORDER-42",
+          "OrderLineID": "2"
+        },
+        "DeliveryNoteReference": {
+          "DeliveryNoteID": "DELIVERY-7",
+          "DeliveryNoteLineID": "B"
+        },
+        "ItemEANCode": "8581234567890",
+        "InvoicedQuantity": "3",
+        "UnitPriceTaxExclusiveAmount": "50",
+        "UnitPriceTaxAmount": "5",
+        "ClassifiedTaxCategory": "0.1"
+      },
+      {
+        "ItemName": "DEP-2026-01",
+        "InvoicedQuantity": "1",
+        "UnitPriceTaxExclusiveAmount": "-20",
+        "UnitPriceTaxAmount": "-4",
+        "ClassifiedTaxCategory": "0.2"
+      }
+    ]
+  }
+}

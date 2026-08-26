@@ -17,7 +17,7 @@ pub struct InvoiceModelError {
 }
 
 impl InvoiceModelError {
-    fn invalid(field: &'static str, message: impl Into<String>) -> Self {
+    pub(crate) fn invalid(field: &'static str, message: impl Into<String>) -> Self {
         Self {
             field,
             message: message.into(),
@@ -154,6 +154,13 @@ impl Decimal {
             other.negative = !other.negative;
         }
         ScaledDecimal::from(self).add(&other).into_decimal()
+    }
+
+    /// Multiplies two arbitrary-precision decimals without rounding.
+    pub fn multiply_exact(&self, other: &Self) -> Self {
+        ScaledDecimal::from(self)
+            .multiply(&ScaledDecimal::from(other))
+            .into_decimal()
     }
 }
 
@@ -1632,6 +1639,38 @@ impl ScaledDecimal {
         self
     }
 
+    fn multiply(self, other: &Self) -> Self {
+        let mut digits = vec![0_u8; self.digits.len() + other.digits.len()];
+        for (left_index, left) in self.digits.iter().copied().enumerate() {
+            let mut carry = 0_u16;
+            for (right_index, right) in other.digits.iter().copied().enumerate() {
+                let index = left_index + right_index;
+                let value = u16::from(digits[index]) + u16::from(left) * u16::from(right) + carry;
+                digits[index] = (value % 10) as u8;
+                carry = value / 10;
+            }
+            let mut index = left_index + other.digits.len();
+            while carry > 0 {
+                if index == digits.len() {
+                    digits.push(0);
+                }
+                let value = u16::from(digits[index]) + carry;
+                digits[index] = (value % 10) as u8;
+                carry = value / 10;
+                index += 1;
+            }
+        }
+        while digits.len() > 1 && digits.last() == Some(&0) {
+            digits.pop();
+        }
+        let is_zero = digits.iter().all(|digit| *digit == 0);
+        Self {
+            negative: !is_zero && self.negative != other.negative,
+            digits,
+            scale: self.scale + other.scale,
+        }
+    }
+
     fn into_decimal(mut self) -> Decimal {
         while self.digits.len() <= self.scale {
             self.digits.push(0);
@@ -1729,6 +1768,24 @@ mod tests {
         assert_eq!(
             right.subtract_exact(&left).as_str(),
             "-999999999999999999.998"
+        );
+    }
+
+    #[test]
+    fn exact_decimal_multiplication_handles_sign_scale_and_carry() {
+        let left = Decimal::new("12.34").unwrap();
+        let right = Decimal::new("-2.5").unwrap();
+        assert_eq!(left.multiply_exact(&right).as_str(), "-30.85");
+
+        let left = Decimal::new("999999999999999999.9").unwrap();
+        let right = Decimal::new("99").unwrap();
+        assert_eq!(
+            left.multiply_exact(&right).as_str(),
+            "98999999999999999990.1"
+        );
+        assert_eq!(
+            left.multiply_exact(&Decimal::new("0").unwrap()).as_str(),
+            "0"
         );
     }
 
