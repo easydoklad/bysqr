@@ -1,7 +1,8 @@
 use std::{env, error::Error, fs, path::PathBuf};
 
 use bysqr::qr::{
-    create_invoice_svg_with_theme, create_pay_svg, LogoColor, LogoLayout, LogoPosition, LogoTheme,
+    create_invoice_svg_with_theme, create_pay_svg_with_theme, LogoColor, LogoLayout, LogoPosition,
+    LogoTheme,
 };
 
 const PAY_PAYLOAD: &str = "000620000OTQ8GD9P3146TKTM0EOR8GS6MCNQU8Q6DBV3A4QK1JTORU2PBR6CBS3SL85PJRVSIR8RE49VEGTF5JRTM45DTL9US038PVH5GCIC1483NLI0MGU6FF0KB8";
@@ -24,11 +25,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         for position in LogoPosition::ALL {
             for color in LogoColor::ALL {
                 let theme = LogoTheme::new(layout, position, color);
-                let pay = String::from_utf8(create_pay_svg(PAY_PAYLOAD, theme))?;
+                let pay = String::from_utf8(create_pay_svg_with_theme(PAY_PAYLOAD, theme)?)?;
                 let invoice = String::from_utf8(create_invoice_svg_with_theme(
                     INVOICE_PAYLOAD.trim(),
                     theme,
-                ))?;
+                )?)?;
                 cards.push_str(&format!(
                     "<figure><div class=\"pair\"><div><b>PAY</b>{pay}</div><div><b>INVOICE</b>{invoice}</div></div><figcaption>{layout:?} / {position:?} / {color:?}<br><code>PAY {} · INVOICE {}</code></figcaption></figure>",
                     color.pay_hex(),

@@ -2,8 +2,8 @@ use eframe::egui;
 use eframe::egui::load::SizedTexture;
 use eframe::egui::{Color32, ColorImage, Image, Margin, TextureOptions};
 
-pub fn show_svg(code: Vec<u8>) {
-    let svg = crate::qr::map_svg(&code, crate::qr::CONTAINER_WIDTH as u32);
+pub fn show_svg(code: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
+    let svg = crate::qr::map_svg(&code, crate::qr::CONTAINER_WIDTH as u32)?;
     let dimensions = [svg.width() as usize, svg.height() as usize];
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -27,6 +27,6 @@ pub fn show_svg(code: Vec<u8>) {
             let sized_texture = SizedTexture::from_handle(&texture);
             ui.add(Image::new(sized_texture))
         });
-    })
-    .expect("unable to show preview");
+    })?;
+    Ok(())
 }

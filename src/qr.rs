@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use usvg::{Options, Transform, Tree};
 use xmltree::{Element, EmitterConfig};
 
+use crate::error::{Error, Result};
+
 mod branding;
 mod invoice;
 mod items;
@@ -15,6 +17,10 @@ mod pay;
 
 pub const CONTAINER_WIDTH: f32 = 512.0;
 pub const CONTAINER_HEIGHT: f32 = 600.0;
+/// Maximum width or height accepted by the raster renderers.
+///
+/// This keeps caller-controlled dimensions from causing unbounded allocations.
+pub const MAX_RASTER_DIMENSION: u32 = 8_192;
 
 /// Approved by-square logo composition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -154,30 +160,30 @@ fn insert_outline(svg: &mut Element, color: &str) {
     svg.children.push(xmltree::XMLNode::Element(path));
 }
 
-fn insert_qr_content(svg: &mut Element, qr: &str, center_x: f32, center_y: f32) {
-    let qr_svg =
-        Element::parse(qr.as_bytes()).expect("unable to parse SVG content from QR encoder");
+fn insert_qr_content(svg: &mut Element, qr: &str, center_x: f32, center_y: f32) -> Result<()> {
+    let qr_svg = Element::parse(qr.as_bytes())
+        .map_err(|error| Error::SvgRender(format!("invalid generated QR SVG: {error}")))?;
 
     let qr_width: f32 = qr_svg
         .attributes
         .get("width")
-        .expect("unable to determine SVG content width")
+        .ok_or_else(|| Error::SvgRender("generated QR SVG has no width".to_string()))?
         .parse()
-        .expect("unable to parse SVG content width as number");
+        .map_err(|error| Error::SvgRender(format!("invalid generated QR SVG width: {error}")))?;
 
     let qr_height: f32 = qr_svg
         .attributes
         .get("height")
-        .expect("unable to determine SVG content height")
+        .ok_or_else(|| Error::SvgRender("generated QR SVG has no height".to_string()))?
         .parse()
-        .expect("unable to parse SVG content height as number");
+        .map_err(|error| Error::SvgRender(format!("invalid generated QR SVG height: {error}")))?;
 
     let qr_path = qr_svg
         .get_child("path")
-        .expect("QR code does not have path element")
+        .ok_or_else(|| Error::SvgRender("generated QR SVG has no path".to_string()))?
         .attributes
         .get("d")
-        .expect("unable to find d attribute within QR code");
+        .ok_or_else(|| Error::SvgRender("generated QR SVG path has no data".to_string()))?;
 
     let translate_x = center_x - (qr_width / 2.0);
     let translate_y = center_y - (qr_height / 2.0);
@@ -191,6 +197,7 @@ fn insert_qr_content(svg: &mut Element, qr: &str, center_x: f32, center_y: f32) 
         ),
     ]);
     svg.children.push(xmltree::XMLNode::Element(path));
+    Ok(())
 }
 
 fn create_empty_svg(width: u32, height: u32) -> Element {
@@ -207,10 +214,15 @@ fn create_empty_svg(width: u32, height: u32) -> Element {
     final_svg
 }
 
+/// Render a PAY by square payload with the default approved theme.
+pub fn create_pay_svg(content: &str) -> Result<Vec<u8>> {
+    create_pay_svg_with_theme(content, LogoTheme::default())
+}
+
 /// Render a PAY by square payload using one approved logo-manual theme.
-pub fn create_pay_svg(content: &str, theme: LogoTheme) -> Vec<u8> {
+pub fn create_pay_svg_with_theme(content: &str, theme: LogoTheme) -> Result<Vec<u8>> {
     let code = QrCode::with_error_correction_level(content.as_bytes(), EcLevel::L)
-        .expect("unable to create QR code");
+        .map_err(|error| Error::QrEncode(error.to_string()))?;
 
     let svg_image = code
         .render::<svg::Color>()
@@ -222,25 +234,25 @@ pub fn create_pay_svg(content: &str, theme: LogoTheme) -> Vec<u8> {
     let (center_x, center_y) = theme.qr_center();
     let mut svg = create_empty_svg(width, height);
     insert_background(&mut svg, "#ffffff", width, height);
-    insert_qr_content(&mut svg, &svg_image, center_x, center_y);
+    insert_qr_content(&mut svg, &svg_image, center_x, center_y)?;
     pay::decorate(&mut svg, theme);
 
     let mut qr = Vec::new();
     let emitter_options = EmitterConfig::default().write_document_declaration(false);
     svg.write_with_config(&mut qr, emitter_options)
-        .expect("unable to write generated SVG. possible XML corruption");
-    qr
+        .map_err(|error| Error::SvgRender(error.to_string()))?;
+    Ok(qr)
 }
 
 /// Render an INVOICE by square payload with the standard orange branding.
-pub fn create_invoice_svg(content: &str) -> Vec<u8> {
+pub fn create_invoice_svg(content: &str) -> Result<Vec<u8>> {
     create_invoice_svg_with_theme(content, LogoTheme::default())
 }
 
 /// Render an INVOICE by square payload using one approved logo-manual theme.
-pub fn create_invoice_svg_with_theme(content: &str, theme: LogoTheme) -> Vec<u8> {
+pub fn create_invoice_svg_with_theme(content: &str, theme: LogoTheme) -> Result<Vec<u8>> {
     let code = QrCode::with_error_correction_level(content.as_bytes(), EcLevel::L)
-        .expect("unable to create QR code");
+        .map_err(|error| Error::QrEncode(error.to_string()))?;
 
     let svg_image = code
         .render::<svg::Color>()
@@ -252,20 +264,20 @@ pub fn create_invoice_svg_with_theme(content: &str, theme: LogoTheme) -> Vec<u8>
     let (center_x, center_y) = theme.qr_center();
     let mut svg = create_empty_svg(width, height);
     insert_background(&mut svg, "#ffffff", width, height);
-    insert_qr_content(&mut svg, &svg_image, center_x, center_y);
+    insert_qr_content(&mut svg, &svg_image, center_x, center_y)?;
     invoice::decorate(&mut svg, theme);
 
     let mut qr = Vec::new();
     let emitter_options = EmitterConfig::default().write_document_declaration(false);
     svg.write_with_config(&mut qr, emitter_options)
-        .expect("unable to write generated SVG. possible XML corruption");
-    qr
+        .map_err(|error| Error::SvgRender(error.to_string()))?;
+    Ok(qr)
 }
 
 /// Render an INVOICE ITEMS by square payload with the standard black branding.
-pub fn create_invoice_items_svg(content: &str) -> Vec<u8> {
+pub fn create_invoice_items_svg(content: &str) -> Result<Vec<u8>> {
     let code = QrCode::with_error_correction_level(content.as_bytes(), EcLevel::L)
-        .expect("unable to create QR code");
+        .map_err(|error| Error::QrEncode(error.to_string()))?;
 
     let svg_image = code
         .render::<svg::Color>()
@@ -285,48 +297,69 @@ pub fn create_invoice_items_svg(content: &str) -> Vec<u8> {
         &svg_image,
         CONTAINER_WIDTH / 2.0,
         CONTAINER_WIDTH / 2.0,
-    );
+    )?;
     items::decorate(&mut svg);
 
     let mut qr = Vec::new();
     let emitter_options = EmitterConfig::default().write_document_declaration(false);
     svg.write_with_config(&mut qr, emitter_options)
-        .expect("unable to write generated SVG. possible XML corruption");
-    qr
+        .map_err(|error| Error::SvgRender(error.to_string()))?;
+    Ok(qr)
 }
 
-pub fn map_svg(svg: &[u8], size: u32) -> Pixmap {
-    let svg_tree = Tree::from_data(svg, &Options::default()).unwrap();
+pub fn map_svg(svg: &[u8], size: u32) -> Result<Pixmap> {
+    validate_raster_dimension("size", size)?;
+    let svg_tree = Tree::from_data(svg, &Options::default())
+        .map_err(|error| Error::SvgRender(error.to_string()))?;
     let source_size = svg_tree.size();
     let scale = size as f32 / source_size.width();
     let width: u32 = size;
     let height = (source_size.height() * scale).round() as u32;
+    validate_raster_dimension("calculated height", height)?;
 
-    let mut pixmap = Pixmap::new(width, height).expect("unable to create pixmap");
+    let mut pixmap = Pixmap::new(width, height).ok_or_else(|| Error::ImageEncode {
+        format: "raster",
+        message: format!("unable to allocate {width} × {height} pixel buffer"),
+    })?;
     resvg::render(
         &svg_tree,
         Transform::from_scale(scale, scale),
         &mut pixmap.as_mut(),
     );
-    pixmap
+    Ok(pixmap)
 }
 
-pub fn render_png(svg: &[u8], size: u32) -> Vec<u8> {
-    let pixmap = map_svg(svg, size);
+pub fn render_png(svg: &[u8], size: u32) -> Result<Vec<u8>> {
+    let pixmap = map_svg(svg, size)?;
 
-    pixmap.encode_png().expect("unable to save image")
+    pixmap.encode_png().map_err(|error| Error::ImageEncode {
+        format: "PNG",
+        message: error.to_string(),
+    })
 }
 
-pub fn to_base64_png(svg: &[u8], size: u32) -> String {
-    let buf = render_png(svg, size);
+pub fn to_base64_png(svg: &[u8], size: u32) -> Result<String> {
+    let buf = render_png(svg, size)?;
     let base64_content = base64::engine::general_purpose::STANDARD.encode(&buf);
-    format!("data:image/png;base64,{}", base64_content)
+    Ok(format!("data:image/png;base64,{base64_content}"))
 }
 
-pub fn render_jpeg(svg: &[u8], size: u32, quality: u8) -> Vec<u8> {
-    let pixmap = map_svg(svg, size);
+pub fn render_jpeg(svg: &[u8], size: u32, quality: u8) -> Result<Vec<u8>> {
+    if !(1..=100).contains(&quality) {
+        return Err(Error::invalid("quality", "must be between 1 and 100"));
+    }
+
+    let pixmap = map_svg(svg, size)?;
     let (width, height) = (pixmap.width(), pixmap.height());
-    let mut buf = Vec::with_capacity((width * height * 3) as usize);
+    let width_u16 = u16::try_from(width)
+        .map_err(|_| Error::invalid("size", "JPEG width exceeds the 16-bit encoder limit"))?;
+    let height_u16 = u16::try_from(height).map_err(|_| {
+        Error::invalid(
+            "calculated height",
+            "JPEG height exceeds the 16-bit encoder limit",
+        )
+    })?;
+    let mut buf = Vec::with_capacity(width as usize * height as usize * 3);
 
     for pixel in pixmap.pixels() {
         buf.push(pixel.red());
@@ -337,14 +370,99 @@ pub fn render_jpeg(svg: &[u8], size: u32, quality: u8) -> Vec<u8> {
     let mut jpeg_buffer = Vec::new();
     let encoder = Encoder::new(&mut jpeg_buffer, quality);
     encoder
-        .encode(&buf, width as u16, height as u16, ColorType::Rgb)
-        .ok()
-        .unwrap();
-    jpeg_buffer
+        .encode(&buf, width_u16, height_u16, ColorType::Rgb)
+        .map_err(|error| Error::ImageEncode {
+            format: "JPEG",
+            message: error.to_string(),
+        })?;
+    Ok(jpeg_buffer)
 }
 
-pub fn to_base64_jpeg(svg: &[u8], size: u32, quality: u8) -> String {
-    let buf = render_jpeg(svg, size, quality);
+pub fn to_base64_jpeg(svg: &[u8], size: u32, quality: u8) -> Result<String> {
+    let buf = render_jpeg(svg, size, quality)?;
     let content = base64::engine::general_purpose::STANDARD.encode(&buf);
-    format!("data:image/jpeg;base64,{}", content)
+    Ok(format!("data:image/jpeg;base64,{content}"))
+}
+
+fn validate_raster_dimension(field: &'static str, value: u32) -> Result<()> {
+    if value == 0 {
+        return Err(Error::invalid(field, "must be greater than zero"));
+    }
+    if value > MAX_RASTER_DIMENSION {
+        return Err(Error::invalid(
+            field,
+            format!("must not exceed {MAX_RASTER_DIMENSION} pixels"),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SIMPLE_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect width="10" height="20"/></svg>"#;
+
+    #[test]
+    fn reports_qr_capacity_errors_instead_of_panicking() {
+        let content = "x".repeat(4_000);
+        assert!(matches!(create_pay_svg(&content), Err(Error::QrEncode(_))));
+        assert!(matches!(
+            create_invoice_svg(&content),
+            Err(Error::QrEncode(_))
+        ));
+        assert!(matches!(
+            create_invoice_items_svg(&content),
+            Err(Error::QrEncode(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_invalid_svg_and_unsafe_raster_dimensions() {
+        assert!(matches!(map_svg(b"not svg", 512), Err(Error::SvgRender(_))));
+        assert!(matches!(
+            map_svg(SIMPLE_SVG, 0),
+            Err(Error::InvalidInput { field: "size", .. })
+        ));
+        assert!(matches!(
+            map_svg(SIMPLE_SVG, MAX_RASTER_DIMENSION + 1),
+            Err(Error::InvalidInput { field: "size", .. })
+        ));
+        assert!(matches!(
+            map_svg(SIMPLE_SVG, MAX_RASTER_DIMENSION),
+            Err(Error::InvalidInput {
+                field: "calculated height",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn validates_jpeg_quality() {
+        for quality in [0, 101] {
+            assert!(matches!(
+                render_jpeg(SIMPLE_SVG, 32, quality),
+                Err(Error::InvalidInput {
+                    field: "quality",
+                    ..
+                })
+            ));
+        }
+    }
+
+    #[test]
+    fn raster_and_data_url_renderers_are_fallible_and_usable() {
+        let pixmap = map_svg(SIMPLE_SVG, 32).unwrap();
+        assert_eq!((pixmap.width(), pixmap.height()), (32, 64));
+        assert!(render_png(SIMPLE_SVG, 32).unwrap().starts_with(b"\x89PNG"));
+        assert!(render_jpeg(SIMPLE_SVG, 32, 90)
+            .unwrap()
+            .starts_with(&[0xff, 0xd8]));
+        assert!(to_base64_png(SIMPLE_SVG, 32)
+            .unwrap()
+            .starts_with("data:image/png;base64,"));
+        assert!(to_base64_jpeg(SIMPLE_SVG, 32, 90)
+            .unwrap()
+            .starts_with("data:image/jpeg;base64,"));
+    }
 }

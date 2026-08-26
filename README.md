@@ -245,8 +245,8 @@ theme type. The renderer selects the approved family-specific palette:
 
 ```rust
 use bysqr::qr::{
-    create_invoice_svg_with_theme, create_pay_svg, LogoColor, LogoLayout,
-    LogoPosition, LogoTheme,
+    create_invoice_svg_with_theme, create_pay_svg_with_theme, LogoColor,
+    LogoLayout, LogoPosition, LogoTheme,
 };
 
 let theme = LogoTheme::new(
@@ -254,9 +254,15 @@ let theme = LogoTheme::new(
     LogoPosition::Right,
     LogoColor::Black,
 );
-let pay_svg = create_pay_svg(&pay_payload, theme);
-let invoice_svg = create_invoice_svg_with_theme(&invoice_payload, theme);
+let pay_svg = create_pay_svg_with_theme(&pay_payload, theme)?;
+let invoice_svg = create_invoice_svg_with_theme(&invoice_payload, theme)?;
+# Ok::<(), bysqr::error::Error>(())
 ```
+
+`create_pay_svg`, `create_invoice_svg` and `create_invoice_items_svg` use their
+approved default compositions. SVG creation and the PNG/JPEG raster helpers
+return `bysqr::error::Result` instead of panicking on invalid input. Raster
+dimensions are limited to 8,192 pixels per side; JPEG quality must be 1–100.
 
 `LogoLayout::ALL`, `LogoPosition::ALL` and `LogoColor::ALL` expose the full
 2 × 4 × 4 preset matrix. A deterministic visual gallery can be generated with:

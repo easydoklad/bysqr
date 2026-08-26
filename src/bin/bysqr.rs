@@ -207,13 +207,16 @@ fn create_svg(
     logo_theme: Option<qr::LogoTheme>,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     match document {
-        Document::Pay(_) => Ok(qr::create_pay_svg(payload, logo_theme.unwrap_or_default())),
+        Document::Pay(_) => Ok(qr::create_pay_svg_with_theme(
+            payload,
+            logo_theme.unwrap_or_default(),
+        )?),
         Document::Invoice(_) => Ok(qr::create_invoice_svg_with_theme(
             payload,
             logo_theme.unwrap_or_default(),
-        )),
+        )?),
         Document::InvoiceItems(_) if logo_theme.is_none() => {
-            Ok(qr::create_invoice_items_svg(payload))
+            Ok(qr::create_invoice_items_svg(payload)?)
         }
         Document::InvoiceItems(_) => Err(cli_error(
             "--logo-layout, --logo-position and --logo-color only apply to PAY and INVOICE documents",
@@ -231,7 +234,7 @@ fn run_encode(source: &str, options: EncodeOptions<'_>) -> Result<(), Box<dyn Er
     if options.preview_requested {
         #[cfg(feature = "preview")]
         {
-            preview::show_svg(svg_code);
+            preview::show_svg(svg_code)?;
             return Ok(());
         }
 
@@ -256,8 +259,8 @@ fn run_encode(source: &str, options: EncodeOptions<'_>) -> Result<(), Box<dyn Er
 
             let content = match output_format {
                 ImageFormat::Svg => svg_code,
-                ImageFormat::Png => qr::render_png(&svg_code, options.size),
-                ImageFormat::Jpeg => qr::render_jpeg(&svg_code, options.size, options.quality),
+                ImageFormat::Png => qr::render_png(&svg_code, options.size)?,
+                ImageFormat::Jpeg => qr::render_jpeg(&svg_code, options.size, options.quality)?,
             };
 
             ensure_directory_for_file(&destination)?;
@@ -265,10 +268,10 @@ fn run_encode(source: &str, options: EncodeOptions<'_>) -> Result<(), Box<dyn Er
         }
         OutputMode::Print(output_format) => match output_format {
             ImageFormat::Svg => println!("{}", String::from_utf8(svg_code)?),
-            ImageFormat::Png => println!("{}", qr::to_base64_png(&svg_code, options.size)),
+            ImageFormat::Png => println!("{}", qr::to_base64_png(&svg_code, options.size)?),
             ImageFormat::Jpeg => println!(
                 "{}",
-                qr::to_base64_jpeg(&svg_code, options.size, options.quality)
+                qr::to_base64_jpeg(&svg_code, options.size, options.quality)?
             ),
         },
     }
@@ -308,7 +311,7 @@ fn decode_source(source: &str) -> Result<Document, Box<dyn Error>> {
     Ok(document::decode(payload.trim())?)
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
     match &cli.command {
@@ -337,5 +340,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
         Some(Commands::Decode { src, format }) => run_decode(src, format),
         None => Ok(()),
+    }
+}
+
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("error: {error}");
+        std::process::exit(1);
     }
 }

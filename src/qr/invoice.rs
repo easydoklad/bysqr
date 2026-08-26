@@ -68,7 +68,8 @@ mod tests {
 
     #[test]
     fn complete_invoice_svg_contains_vector_branding() {
-        let svg = String::from_utf8(super::super::create_invoice_svg("INVOICE-FIXTURE")).unwrap();
+        let svg = String::from_utf8(super::super::create_invoice_svg("INVOICE-FIXTURE").unwrap())
+            .unwrap();
 
         assert!(svg.contains(LogoColor::Dark.invoice_hex()));
         assert!(svg.contains("M1386.1976,5.6554"));
@@ -79,9 +80,10 @@ mod tests {
 
     #[test]
     fn legacy_entry_point_uses_the_default_invoice_theme() {
-        let legacy = super::super::create_invoice_svg("INVOICE-FIXTURE");
+        let legacy = super::super::create_invoice_svg("INVOICE-FIXTURE").unwrap();
         let explicit =
-            super::super::create_invoice_svg_with_theme("INVOICE-FIXTURE", LogoTheme::default());
+            super::super::create_invoice_svg_with_theme("INVOICE-FIXTURE", LogoTheme::default())
+                .unwrap();
         assert_eq!(
             Element::parse(legacy.as_slice()).unwrap(),
             Element::parse(explicit.as_slice()).unwrap()
@@ -94,10 +96,10 @@ mod tests {
             for position in LogoPosition::ALL {
                 for color in LogoColor::ALL {
                     let theme = LogoTheme::new(layout, position, color);
-                    let svg = String::from_utf8(super::super::create_invoice_svg_with_theme(
-                        "INVOICE-THEME",
-                        theme,
-                    ))
+                    let svg = String::from_utf8(
+                        super::super::create_invoice_svg_with_theme("INVOICE-THEME", theme)
+                            .unwrap(),
+                    )
                     .unwrap();
                     let (width, height) = theme.dimensions();
 

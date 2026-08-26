@@ -42,10 +42,9 @@ mod tests {
 
     #[test]
     fn complete_pay_svg_contains_embedded_vector_branding() {
-        let svg = String::from_utf8(super::super::create_pay_svg(
-            "PAY-FIXTURE",
-            LogoTheme::default(),
-        ))
+        let svg = String::from_utf8(
+            super::super::create_pay_svg_with_theme("PAY-FIXTURE", LogoTheme::default()).unwrap(),
+        )
         .unwrap();
 
         assert!(svg.contains(LogoColor::Dark.pay_hex()));
@@ -63,13 +62,26 @@ mod tests {
     }
 
     #[test]
+    fn default_entry_point_uses_the_default_pay_theme() {
+        let default = super::super::create_pay_svg("PAY-FIXTURE").unwrap();
+        let explicit =
+            super::super::create_pay_svg_with_theme("PAY-FIXTURE", LogoTheme::default()).unwrap();
+        assert_eq!(
+            Element::parse(default.as_slice()).unwrap(),
+            Element::parse(explicit.as_slice()).unwrap()
+        );
+    }
+
+    #[test]
     fn every_manual_theme_has_expected_dimensions_color_and_frame() {
         for layout in LogoLayout::ALL {
             for position in LogoPosition::ALL {
                 for color in LogoColor::ALL {
                     let theme = LogoTheme::new(layout, position, color);
-                    let svg = String::from_utf8(super::super::create_pay_svg("PAY-THEME", theme))
-                        .unwrap();
+                    let svg = String::from_utf8(
+                        super::super::create_pay_svg_with_theme("PAY-THEME", theme).unwrap(),
+                    )
+                    .unwrap();
                     let (width, height) = theme.dimensions();
 
                     assert!(svg.contains(&format!("viewBox=\"0 0 {width} {height}\"")));

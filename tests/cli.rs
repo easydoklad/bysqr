@@ -152,6 +152,32 @@ fn rejects_logo_theme_options_for_invoice_items() {
 }
 
 #[test]
+fn reports_invalid_raster_options_without_panicking() {
+    let source = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pay/json/standing-order.json"
+    );
+    for (format, option, value, expected) in [
+        ("png", "--size", "0", "invalid size"),
+        ("png", "--size", "8193", "invalid size"),
+        ("jpeg", "--quality", "0", "invalid quality"),
+        ("jpeg", "--quality", "101", "invalid quality"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+            .args(["encode", "--src", source, "--format", format, option, value])
+            .output()
+            .unwrap();
+
+        assert!(!output.status.success(), "{format} {option} {value}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(expected),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[test]
 fn encodes_canonical_invoice_items_json_with_items_branding() {
     let source = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -180,8 +206,8 @@ fn decodes_generated_qr_image_file() {
     let fixture = fixture();
     let pay = try_deserialize_pay(&fixture.source).unwrap();
     let payload = pay::encode(&pay).unwrap();
-    let svg = qr::create_pay_svg(&payload, qr::LogoTheme::default());
-    let png = qr::render_png(&svg, 1_024);
+    let svg = qr::create_pay_svg(&payload).unwrap();
+    let png = qr::render_png(&svg, 1_024).unwrap();
     let source = std::env::temp_dir().join(format!("bysqr-cli-pay-{}.png", std::process::id()));
     std::fs::write(&source, png).unwrap();
 
@@ -216,8 +242,8 @@ fn decodes_generated_invoice_qr_image_file() {
     ))
     .unwrap();
     let payload = invoice::encode(&invoice).unwrap();
-    let svg = qr::create_invoice_svg(&payload);
-    let png = qr::render_png(&svg, 1_024);
+    let svg = qr::create_invoice_svg(&payload).unwrap();
+    let png = qr::render_png(&svg, 1_024).unwrap();
     let source = std::env::temp_dir().join(format!("bysqr-cli-invoice-{}.png", std::process::id()));
     std::fs::write(&source, png).unwrap();
 
@@ -251,8 +277,8 @@ fn reports_disabled_qr_image_reader() {
     let fixture = fixture();
     let pay = try_deserialize_pay(&fixture.source).unwrap();
     let payload = pay::encode(&pay).unwrap();
-    let svg = qr::create_pay_svg(&payload, qr::LogoTheme::default());
-    let png = qr::render_png(&svg, 512);
+    let svg = qr::create_pay_svg(&payload).unwrap();
+    let png = qr::render_png(&svg, 512).unwrap();
     let source = std::env::temp_dir().join(format!("bysqr-cli-{}.png", std::process::id()));
     std::fs::write(&source, png).unwrap();
 

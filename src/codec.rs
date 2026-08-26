@@ -100,11 +100,12 @@ pub fn decode_payload(encoded: &str) -> Result<DecodedPayload> {
     }
 
     let uncompressed = decompress(&payload[4..], uncompressed_length)?;
-    let expected_crc = u32::from_le_bytes(
-        uncompressed[..4]
-            .try_into()
-            .expect("four CRC32 bytes were checked above"),
-    );
+    let expected_crc = u32::from_le_bytes([
+        uncompressed[0],
+        uncompressed[1],
+        uncompressed[2],
+        uncompressed[3],
+    ]);
     let sequence_bytes = &uncompressed[4..];
 
     let mut hasher = Hasher::new();

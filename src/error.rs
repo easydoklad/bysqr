@@ -29,6 +29,12 @@ pub enum Error {
         format: &'static str,
         message: String,
     },
+    QrEncode(String),
+    SvgRender(String),
+    ImageEncode {
+        format: &'static str,
+        message: String,
+    },
     ImageDecode(String),
     QrNotFound,
     QrDecode(String),
@@ -89,6 +95,11 @@ impl fmt::Display for Error {
             ),
             Self::Deserialize { format, message } => {
                 write!(formatter, "unable to deserialize {format}: {message}")
+            }
+            Self::QrEncode(message) => write!(formatter, "unable to encode QR code: {message}"),
+            Self::SvgRender(message) => write!(formatter, "unable to render SVG: {message}"),
+            Self::ImageEncode { format, message } => {
+                write!(formatter, "unable to encode {format} image: {message}")
             }
             Self::ImageDecode(message) => write!(formatter, "unable to decode image: {message}"),
             Self::QrNotFound => formatter.write_str("image does not contain a detectable QR code"),

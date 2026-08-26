@@ -27,7 +27,8 @@ mod tests {
     #[test]
     fn complete_items_svg_contains_vector_branding() {
         let svg =
-            String::from_utf8(super::super::create_invoice_items_svg("ITEMS-FIXTURE")).unwrap();
+            String::from_utf8(super::super::create_invoice_items_svg("ITEMS-FIXTURE").unwrap())
+                .unwrap();
         assert!(svg.contains("M104.382 0C106.433"));
         assert!(svg.contains("M174.6769.2864"));
         assert!(!svg.contains("<text"));
