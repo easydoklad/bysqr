@@ -4,11 +4,13 @@ use chrono::NaiveDate;
 
 use crate::{
     codec::{self, Header},
-    encoder,
     error::{Error, Result},
-    models::{
-        Amount, BankAccount, BankAccounts, DirectDebitExt, DirectDebitScheme, DirectDebitType,
-        Months, Pay, Payment, PaymentOptions, Payments, Periodicity, StandingOrderExt,
+    pay::{
+        encoder,
+        models::{
+            Amount, BankAccount, BankAccounts, DirectDebitExt, DirectDebitScheme, DirectDebitType,
+            Months, Pay, Payment, PaymentOptions, Payments, Periodicity, StandingOrderExt,
+        },
     },
 };
 

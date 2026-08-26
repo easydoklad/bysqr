@@ -1,8 +1,8 @@
 use bysqr::{
     codec::{encode_payload, Header},
-    decoder, encoder,
     error::Error,
-    models::try_deserialize_pay,
+    pay::{self, try_deserialize_pay},
+    Document,
 };
 use serde::Deserialize;
 
@@ -23,26 +23,38 @@ fn assert_sequence_round_trip(content: &str) {
     let fixture: SequenceFixture = serde_json::from_str(content).unwrap();
     let expected = try_deserialize_pay(&fixture.source).unwrap();
 
-    let decoded_sequence = decoder::decode_sequence(&fixture.expected_sequence).unwrap();
+    let decoded_sequence = pay::decode_sequence(&fixture.expected_sequence).unwrap();
     assert_eq!(decoded_sequence, expected);
     assert_eq!(
-        encoder::encode_sequence(&decoded_sequence).unwrap(),
+        pay::encode_sequence(&decoded_sequence).unwrap(),
         fixture.expected_sequence
     );
 
-    let payload = encoder::encode(&expected).unwrap();
-    assert_eq!(decoder::decode(&payload).unwrap(), expected);
+    let payload = pay::encode(&expected).unwrap();
+    assert_eq!(pay::decode(&payload).unwrap(), expected);
 }
 
 fn assert_payload_fixture(content: &str) {
     let fixture: PayloadFixture = serde_json::from_str(content).unwrap();
     let expected = try_deserialize_pay(&fixture.source).unwrap();
-    let decoded = decoder::decode(&fixture.payload).unwrap();
+    let decoded = pay::decode(&fixture.payload).unwrap();
 
     assert_eq!(decoded, expected);
     assert_eq!(
-        encoder::encode_sequence(&decoded).unwrap(),
+        pay::encode_sequence(&decoded).unwrap(),
         fixture.expected_sequence
+    );
+}
+
+#[test]
+fn crate_level_decoder_classifies_pay_documents() {
+    let fixture: PayloadFixture =
+        serde_json::from_str(include_str!("fixtures/pay/valid-payment-order.json")).unwrap();
+    let expected = try_deserialize_pay(&fixture.source).unwrap();
+
+    assert_eq!(
+        bysqr::decode(&fixture.payload).unwrap(),
+        Document::Pay(expected)
     );
 }
 
@@ -68,7 +80,7 @@ fn round_trips_every_xsd_sequence_fixture() {
 fn restores_bulk_beneficiaries_to_their_payments() {
     let fixture: SequenceFixture =
         serde_json::from_str(include_str!("fixtures/pay/xsd-bulk-payment-order.json")).unwrap();
-    let pay = decoder::decode_sequence(&fixture.expected_sequence).unwrap();
+    let pay = pay::decode_sequence(&fixture.expected_sequence).unwrap();
 
     assert_eq!(
         pay.payments.payment[0].beneficiary_name.as_deref(),
@@ -93,11 +105,11 @@ fn rejects_non_pay_headers_and_invalid_base32() {
     )
     .unwrap();
     assert!(matches!(
-        decoder::decode(&payload),
+        pay::decode(&payload),
         Err(Error::InvalidPayload(_))
     ));
     assert!(matches!(
-        decoder::decode("NOT-A-BASE32-PAYLOAD!"),
+        pay::decode("NOT-A-BASE32-PAYLOAD!"),
         Err(Error::InvalidPayload(_))
     ));
 }
@@ -111,14 +123,14 @@ fn rejects_missing_trailing_and_invalid_count_fields() {
     let mut missing = fields.clone();
     missing.pop();
     assert!(matches!(
-        decoder::decode_sequence(&missing.join("\t")),
+        pay::decode_sequence(&missing.join("\t")),
         Err(Error::InvalidSequence { .. })
     ));
 
     let mut trailing = fields.clone();
     trailing.push("unexpected");
     assert!(matches!(
-        decoder::decode_sequence(&trailing.join("\t")),
+        pay::decode_sequence(&trailing.join("\t")),
         Err(Error::InvalidSequence { .. })
     ));
 
@@ -126,7 +138,7 @@ fn rejects_missing_trailing_and_invalid_count_fields() {
         let mut malformed = fields.clone();
         malformed[index] = invalid;
         assert!(
-            decoder::decode_sequence(&malformed.join("\t")).is_err(),
+            pay::decode_sequence(&malformed.join("\t")).is_err(),
             "field {index} accepted {invalid:?}"
         );
     }
@@ -142,7 +154,7 @@ fn rejects_unknown_classifiers() {
         let mut malformed = fields.clone();
         malformed[index] = invalid;
         assert!(matches!(
-            decoder::decode_sequence(&malformed.join("\t")),
+            pay::decode_sequence(&malformed.join("\t")),
             Err(Error::InvalidSequence { .. }) | Err(Error::InvalidPayload(_))
         ));
     }
@@ -152,7 +164,7 @@ fn rejects_unknown_classifiers() {
 fn serializes_decoded_pay_as_json_and_xml() {
     let fixture: SequenceFixture =
         serde_json::from_str(include_str!("fixtures/pay/xsd-direct-debit-sepa.json")).unwrap();
-    let decoded = decoder::decode_sequence(&fixture.expected_sequence).unwrap();
+    let decoded = pay::decode_sequence(&fixture.expected_sequence).unwrap();
 
     let json = serde_json::to_string_pretty(&decoded).unwrap();
     assert_eq!(try_deserialize_pay(&json).unwrap(), decoded);

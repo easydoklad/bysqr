@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use bysqr::models::{try_deserialize_pay, Pay};
+use bysqr::pay::{try_deserialize_pay, Pay};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -37,11 +37,11 @@ fn encodes_canonical_json_file() {
 #[cfg(feature = "qr-reader")]
 #[test]
 fn decodes_generated_qr_image_file() {
-    use bysqr::{encoder, qr};
+    use bysqr::{pay, qr};
 
     let fixture = fixture();
     let pay = try_deserialize_pay(&fixture.source).unwrap();
-    let payload = encoder::encode(&pay).unwrap();
+    let payload = pay::encode(&pay).unwrap();
     let svg = qr::create_pay_svg(&payload, qr::Theme::default());
     let png = qr::render_png(&svg, 1_024);
     let source = std::env::temp_dir().join(format!("bysqr-cli-{}.png", std::process::id()));
@@ -71,11 +71,11 @@ fn decodes_generated_qr_image_file() {
 #[cfg(not(feature = "qr-reader"))]
 #[test]
 fn reports_disabled_qr_image_reader() {
-    use bysqr::{encoder, qr};
+    use bysqr::{pay, qr};
 
     let fixture = fixture();
     let pay = try_deserialize_pay(&fixture.source).unwrap();
-    let payload = encoder::encode(&pay).unwrap();
+    let payload = pay::encode(&pay).unwrap();
     let svg = qr::create_pay_svg(&payload, qr::Theme::default());
     let png = qr::render_png(&svg, 512);
     let source = std::env::temp_dir().join(format!("bysqr-cli-{}.png", std::process::id()));

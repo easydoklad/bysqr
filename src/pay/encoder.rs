@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use crate::{
     codec::{self, Header},
     error::{Error, Result},
-    models::{
+    pay::models::{
         Amount, BankAccount, DirectDebitExt, DirectDebitScheme, Pay, Payment, PaymentOption,
         Periodicity, StandingOrderExt,
     },

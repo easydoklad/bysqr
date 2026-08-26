@@ -1,4 +1,8 @@
-use bysqr::{codec::decode_payload, decoder, encoder, error::Error, models::try_deserialize_pay};
+use bysqr::{
+    codec::decode_payload,
+    error::Error,
+    pay::{decoder, encoder, try_deserialize_pay},
+};
 use serde::Deserialize;
 use serde_json::json;
 

@@ -1,20 +1,19 @@
 #![cfg(feature = "qr-reader")]
 
 use bysqr::{
-    encoder,
     error::Error,
-    models::try_deserialize_pay,
+    pay::{self, try_deserialize_pay},
     qr::{self, Theme},
     qr_reader,
 };
 
-fn fixture_pay() -> bysqr::models::Pay {
+fn fixture_pay() -> bysqr::pay::Pay {
     try_deserialize_pay(include_str!("fixtures/pay/json/direct-debit-sepa.json")).unwrap()
 }
 
-fn fixture_qr() -> (bysqr::models::Pay, String, Vec<u8>) {
+fn fixture_qr() -> (bysqr::pay::Pay, String, Vec<u8>) {
     let pay = fixture_pay();
-    let payload = encoder::encode(&pay).unwrap();
+    let payload = pay::encode(&pay).unwrap();
     let svg = qr::create_pay_svg(&payload, Theme::default());
     let png = qr::render_png(&svg, 1_024);
     (pay, payload, png)
@@ -34,7 +33,7 @@ fn extracts_payload_and_decodes_generated_pay_png() {
 #[test]
 fn decodes_generated_pay_jpeg() {
     let expected = fixture_pay();
-    let payload = encoder::encode(&expected).unwrap();
+    let payload = pay::encode(&expected).unwrap();
     let svg = qr::create_pay_svg(&payload, Theme::default());
     let jpeg = qr::render_jpeg(&svg, 1_024, 95);
 

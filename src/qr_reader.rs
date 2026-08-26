@@ -2,15 +2,14 @@
 //!
 //! Enable the `qr-reader` Cargo feature to extract text payloads from raster
 //! images. Consumers that already have a QR scanner can keep using
-//! [`crate::decoder::decode`] directly without enabling this module.
+//! [`crate::pay::decode`] directly without enabling this module.
 
 use image::DynamicImage;
 use rqrr::PreparedImage;
 
 use crate::{
-    decoder,
     error::{Error, Result},
-    models::Pay,
+    pay::{self, Pay},
 };
 
 /// Extract every decodable QR text payload from a raster image.
@@ -65,13 +64,13 @@ pub fn decode_pay_from_bytes(bytes: &[u8]) -> Result<Pay> {
 
 fn decode_pay_payloads(payloads: Vec<String>) -> Result<Pay> {
     if payloads.len() == 1 {
-        return decoder::decode(payloads[0].trim());
+        return pay::decode(payloads[0].trim());
     }
 
     let decoded_count = payloads.len();
     let mut pay_documents = payloads
         .iter()
-        .filter_map(|payload| decoder::decode(payload.trim()).ok());
+        .filter_map(|payload| pay::decode(payload.trim()).ok());
     let first = pay_documents.next();
     let second = pay_documents.next();
 
@@ -90,14 +89,14 @@ fn decode_pay_payloads(payloads: Vec<String>) -> Result<Pay> {
 #[cfg(test)]
 mod tests {
     use super::decode_pay_payloads;
-    use crate::{encoder, error::Error, models::try_deserialize_pay};
+    use crate::{error::Error, pay};
 
     fn valid_payload() -> String {
-        let pay = try_deserialize_pay(include_str!(
+        let pay = pay::try_deserialize_pay(include_str!(
             "../tests/fixtures/pay/json/bulk-payment-order.json"
         ))
         .unwrap();
-        encoder::encode(&pay).unwrap()
+        pay::encode(&pay).unwrap()
     }
 
     #[test]

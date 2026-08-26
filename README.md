@@ -165,33 +165,34 @@ You can find `bysqrcli` executable and rust library in `target/release`.
 Both deserialization and encoding return typed errors:
 
 ```rust
-use bysqr::{decoder, encoder, models::try_deserialize_pay};
+use bysqr::pay;
 
-let pay = try_deserialize_pay(include_str!("payment.xml"))?;
-let payload = encoder::encode(&pay)?;
-let decoded = decoder::decode(&payload)?;
+let pay = pay::try_deserialize_pay(include_str!("payment.xml"))?;
+let payload = pay::encode(&pay)?;
+let decoded = pay::decode(&payload)?;
 assert_eq!(decoded, pay);
 # Ok::<(), bysqr::error::Error>(())
 ```
 
-`encoder::encode_sequence` exposes the uncompressed tab-delimited form for
+`pay::encode_sequence` exposes the uncompressed tab-delimited form for
 conformance tooling. `codec::decode_payload` validates and inspects an encoded
 envelope, including its header, LZMA data, declared two-byte size, CRC32, and
-UTF-8 sequence. `decoder::decode` validates and reconstructs the complete PAY
-model, while `decoder::decode_sequence` can inspect an already uncompressed
+UTF-8 sequence. `pay::decode` validates and reconstructs the complete PAY
+model, while `pay::decode_sequence` can inspect an already uncompressed
 sequence. The same schema used by the fixture suite is embedded in the library
-as `bysqr::PAY_JSON_SCHEMA` for consumers that want to validate JSON before
+as `bysqr::pay::JSON_SCHEMA` for consumers that want to validate JSON before
 encoding it.
 
-`encoder::encode` and `encoder::encode_sequence` enforce the 550-character QR
+`pay::encode` and `pay::encode_sequence` enforce the 550-character QR
 limit. For the non-QR transport described by section 3.9.2 of the specification,
-use `encoder::encode_with_limit(pay, encoder::SequenceLimit::Unbounded)`. This
+use `pay::encode_with_limit(pay, pay::SequenceLimit::Unbounded)`. This
 mode never silently drops fields; the protocol-level 16-bit payload limit still
 applies.
 
 With the `qr-reader` feature enabled, Rust consumers can pass raster bytes to
 `qr_reader::decode_pay_from_bytes`. Without it they can feed text from any
-external scanner directly to `decoder::decode`.
+external scanner directly to `pay::decode`. The crate-level `bysqr::decode`
+classifies a payload and returns a `bysqr::Document`.
 
 ## Tests
 

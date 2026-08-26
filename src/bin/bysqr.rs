@@ -7,8 +7,7 @@ use std::{
 #[cfg(feature = "qr-reader")]
 use bysqr::qr_reader;
 use bysqr::{
-    decoder, encoder,
-    models::{try_deserialize_pay, Pay},
+    pay::{self, Pay},
     qr,
 };
 use clap::{Parser, Subcommand, ValueEnum};
@@ -125,7 +124,7 @@ fn read_source(source: &str) -> Result<String, io::Error> {
 }
 
 fn deserialize_pay(source: &str) -> Result<Pay, Box<dyn Error>> {
-    Ok(try_deserialize_pay(&read_source(source)?)?)
+    Ok(pay::try_deserialize_pay(&read_source(source)?)?)
 }
 
 fn run_encode(
@@ -138,7 +137,7 @@ fn run_encode(
     overwrite: bool,
 ) -> Result<(), Box<dyn Error>> {
     let pay = deserialize_pay(source)?;
-    let encoded = encoder::encode(&pay)?;
+    let encoded = pay::encode(&pay)?;
     let svg_code = qr::create_pay_svg(&encoded, qr::Theme::default());
 
     if preview_requested {
@@ -199,7 +198,7 @@ fn run_decode(source: &str, format: &DataFormat) -> Result<(), Box<dyn Error>> {
 fn decode_source(source: &str) -> Result<Pay, Box<dyn Error>> {
     let path = Path::new(source);
     if !path.is_file() {
-        return Ok(decoder::decode(source.trim())?);
+        return Ok(pay::decode(source.trim())?);
     }
 
     let bytes = fs::read(path)?;
@@ -215,7 +214,7 @@ fn decode_source(source: &str) -> Result<Pay, Box<dyn Error>> {
     }
 
     let payload = String::from_utf8(bytes)?;
-    Ok(decoder::decode(payload.trim())?)
+    Ok(pay::decode(payload.trim())?)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {

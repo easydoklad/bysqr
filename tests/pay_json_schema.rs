@@ -1,4 +1,4 @@
-use bysqr::{decoder, encoder, models::try_deserialize_pay, PAY_JSON_SCHEMA};
+use bysqr::pay::{decoder, encoder, try_deserialize_pay, JSON_SCHEMA};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -9,7 +9,7 @@ struct SequenceFixture {
 }
 
 fn schema() -> Value {
-    serde_json::from_str(PAY_JSON_SCHEMA).expect("PAY JSON Schema must be valid JSON")
+    serde_json::from_str(JSON_SCHEMA).expect("PAY JSON Schema must be valid JSON")
 }
 
 fn fixture_pairs() -> [(&'static str, &'static str); 4] {

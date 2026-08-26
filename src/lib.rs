@@ -1,25 +1,23 @@
 #[cfg(feature = "wasm")]
-use crate::models::Pay;
+use crate::pay::Pay;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
 
 pub mod codec;
-pub mod decoder;
-pub mod encoder;
+pub mod document;
 pub mod error;
-pub mod models;
+pub mod pay;
 pub mod qr;
 #[cfg(feature = "qr-reader")]
 pub mod qr_reader;
 
-/// Canonical PAY JSON Schema (Draft 2020-12), derived from `bysquare.xsd`.
-pub const PAY_JSON_SCHEMA: &str = include_str!("../spec/pay-by-square.schema.json");
+pub use document::{decode, Document};
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn encode_to_svg(source: &str) -> Result<String, JsValue> {
-    let pay: Pay = models::try_deserialize_pay(source).map_err(js_error)?;
-    let encoded = encoder::encode(&pay).map_err(js_error)?;
+    let pay: Pay = pay::try_deserialize_pay(source).map_err(js_error)?;
+    let encoded = pay::encode(&pay).map_err(js_error)?;
     let svg = qr::create_pay_svg(&encoded, qr::Theme::default());
     String::from_utf8(svg).map_err(js_error)
 }
@@ -27,8 +25,8 @@ pub fn encode_to_svg(source: &str) -> Result<String, JsValue> {
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn encode_to_png(source: &str, size: u32) -> Result<String, JsValue> {
-    let pay: Pay = models::try_deserialize_pay(source).map_err(js_error)?;
-    let encoded = encoder::encode(&pay).map_err(js_error)?;
+    let pay: Pay = pay::try_deserialize_pay(source).map_err(js_error)?;
+    let encoded = pay::encode(&pay).map_err(js_error)?;
     let svg = qr::create_pay_svg(&encoded, qr::Theme::default());
     Ok(qr::to_base64_png(&svg, size))
 }
@@ -36,8 +34,8 @@ pub fn encode_to_png(source: &str, size: u32) -> Result<String, JsValue> {
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn encode_to_jpeg(source: &str, size: u32, quality: u8) -> Result<String, JsValue> {
-    let pay: Pay = models::try_deserialize_pay(source).map_err(js_error)?;
-    let encoded = encoder::encode(&pay).map_err(js_error)?;
+    let pay: Pay = pay::try_deserialize_pay(source).map_err(js_error)?;
+    let encoded = pay::encode(&pay).map_err(js_error)?;
     let svg = qr::create_pay_svg(&encoded, qr::Theme::default());
     Ok(qr::to_base64_jpeg(&svg, size, quality))
 }
@@ -45,14 +43,14 @@ pub fn encode_to_jpeg(source: &str, size: u32, quality: u8) -> Result<String, Js
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn decode_to_json(payload: &str) -> Result<String, JsValue> {
-    let pay = decoder::decode(payload.trim()).map_err(js_error)?;
+    let pay = pay::decode(payload.trim()).map_err(js_error)?;
     serde_json::to_string_pretty(&pay).map_err(js_error)
 }
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn decode_to_xml(payload: &str) -> Result<String, JsValue> {
-    let pay = decoder::decode(payload.trim()).map_err(js_error)?;
+    let pay = pay::decode(payload.trim()).map_err(js_error)?;
     quick_xml::se::to_string(&pay).map_err(js_error)
 }
 

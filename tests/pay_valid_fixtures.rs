@@ -1,7 +1,6 @@
 use bysqr::{
     codec::{decode_payload, Header},
-    encoder,
-    models::try_deserialize_pay,
+    pay::{self, try_deserialize_pay},
 };
 use serde::Deserialize;
 
@@ -27,7 +26,7 @@ fn assert_fixture(content: &str) {
 
     let pay = try_deserialize_pay(&fixture.source)
         .unwrap_or_else(|error| panic!("{}: source failed: {error}", fixture.name));
-    let generated = encoder::encode(&pay)
+    let generated = pay::encode(&pay)
         .unwrap_or_else(|error| panic!("{}: encoder failed: {error}", fixture.name));
     let decoded = decode_payload(&generated)
         .unwrap_or_else(|error| panic!("{}: generated payload failed: {error}", fixture.name));
