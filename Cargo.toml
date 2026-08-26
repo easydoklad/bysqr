@@ -14,6 +14,10 @@ crate-type = ["cdylib", "rlib"]
 name = "bysqrcli"
 path = "src/bin/bysqr.rs"
 
+[[bin]]
+name = "theme-preview"
+path = "src/bin/theme_preview.rs"
+
 [features]
 default = []
 preview = ["eframe"]

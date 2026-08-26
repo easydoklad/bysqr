@@ -6,14 +6,14 @@ use bysqr::qr::{
 
 const PAY_PAYLOAD: &str = "000620000OTQ8GD9P3146TKTM0EOR8GS6MCNQU8Q6DBV3A4QK1JTORU2PBR6CBS3SL85PJRVSIR8RE49VEGTF5JRTM45DTL9US038PVH5GCIC1483NLI0MGU6FF0KB8";
 const INVOICE_PAYLOAD: &str = include_str!(
-    "../tests/fixtures/invoice/valid-interoperability-offline-official-current.payload.txt"
+    "../../tests/fixtures/invoice/valid-interoperability-offline-official-current.payload.txt"
 );
 
 fn main() -> Result<(), Box<dyn Error>> {
     let destination = env::args_os()
         .nth(1)
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("target/theme-gallery.html"));
+        .unwrap_or_else(|| PathBuf::from("target/theme-preview.html"));
 
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)?;
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>by-square theme gallery</title>
+<title>by-square theme preview</title>
 <style>
   :root {{ color-scheme: light; font-family: system-ui, sans-serif; }}
   body {{ margin: 0; padding: 32px; background: #eceef1; color: #202124; }}
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   @media (max-width: 960px) {{ main {{ grid-template-columns: 1fr; }} }}
   @media (max-width: 560px) {{ body {{ padding: 16px; }} .pair {{ grid-template-columns: 1fr; }} }}
 </style>
-<h1>PAY and INVOICE by-square theme gallery</h1>
+<h1>PAY and INVOICE by-square theme preview</h1>
 <p>All 32 logo-manual presets. Each semantic color maps to the approved family-specific palette.</p>
 <main>{cards}</main>
 </html>

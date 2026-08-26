@@ -262,10 +262,10 @@ let invoice_svg = create_invoice_svg_with_theme(&invoice_payload, theme);
 2 × 4 × 4 preset matrix. A deterministic visual gallery can be generated with:
 
 ```shell
-cargo run --example theme_gallery
+cargo run --bin theme-preview
 ```
 
-The resulting `target/theme-gallery.html` compares PAY and INVOICE across all
+The resulting `target/theme-preview.html` compares PAY and INVOICE across all
 32 variants. No public API accepts arbitrary colors; INVOICE ITEMS remains
 fixed to its black composition.
 
