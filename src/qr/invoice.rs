@@ -8,14 +8,12 @@ use std::collections::HashMap;
 
 use xmltree::{Element, XMLNode};
 
-/// Maximum width and height of the QR matrix on the 512-unit parent canvas.
-///
-/// Centering a matrix no larger than this leaves at least 48 units on every
-/// side. That whitespace is the QR quiet area; none of the decoration below
-/// enters it.
-pub(crate) const QR_MAX_DIMENSION: u32 = 416;
+use super::{InvoiceColor, InvoiceTheme, LogoLayout, LogoPosition};
 
-const ACCENT_COLOR: &str = "#f78f1e";
+/// Maximum size of the QR matrix including its renderer-provided four-module
+/// quiet zone. The remaining four canvas units separate it from the frame.
+pub(crate) const QR_MAX_DIMENSION: u32 = 504;
+
 const BY_SQUARE_COLOR: &str = "#b2b4b9";
 
 /// Add the official-color Invoice frame, wordmark, and document icon.
@@ -23,19 +21,119 @@ const BY_SQUARE_COLOR: &str = "#b2b4b9";
 /// The caller must insert the white background and centered QR matrix first.
 /// Keeping this as a decoration-only hook makes it impossible for the branding
 /// to resize, translate, or cover the QR matrix.
-pub(crate) fn decorate(svg: &mut Element) {
-    super::insert_outline(svg, ACCENT_COLOR);
-    insert_invoice_wordmark(svg);
-    insert_by_square_wordmark(svg);
-    insert_document_icon(svg);
+pub(crate) fn decorate(svg: &mut Element, theme: InvoiceTheme) {
+    let color = theme.color.hex();
+    let by_square_color = if theme.color == InvoiceColor::Black {
+        color
+    } else {
+        BY_SQUARE_COLOR
+    };
+
+    match theme.position {
+        LogoPosition::Bottom => {
+            insert_bottom_frame(svg, theme.layout, color);
+            svg.children
+                .push(XMLNode::Element(bottom_branding(color, by_square_color)));
+        }
+        LogoPosition::Top => {
+            if theme.layout == LogoLayout::Print {
+                let mut frame = Element::new("g");
+                frame.attributes =
+                    HashMap::from([("transform".to_owned(), "matrix(1 0 0 -1 0 600)".to_owned())]);
+                super::insert_outline(&mut frame, color);
+                svg.children.push(XMLNode::Element(frame));
+            }
+            let mut branding = bottom_branding(color, by_square_color);
+            branding.attributes =
+                HashMap::from([("transform".to_owned(), "translate(0 -498)".to_owned())]);
+            svg.children.push(XMLNode::Element(branding));
+        }
+        LogoPosition::Right => {
+            insert_right_frame(svg, theme.layout, color);
+
+            let mut words = bottom_wordmarks(color, by_square_color);
+            words.attributes =
+                HashMap::from([("transform".to_owned(), "matrix(0 -1 1 0 0 512)".to_owned())]);
+            svg.children.push(XMLNode::Element(words));
+
+            let mut icon = Element::new("g");
+            icon.attributes =
+                HashMap::from([("transform".to_owned(), "translate(88 -498)".to_owned())]);
+            insert_document_icon(&mut icon, color);
+            svg.children.push(XMLNode::Element(icon));
+        }
+        LogoPosition::Left => {
+            insert_left_frame(svg, theme.layout, color);
+
+            let mut words = bottom_wordmarks(color, by_square_color);
+            words.attributes = HashMap::from([(
+                "transform".to_owned(),
+                "matrix(0 1 -1 0 600 110)".to_owned(),
+            )]);
+            svg.children.push(XMLNode::Element(words));
+
+            let mut icon = Element::new("g");
+            icon.attributes =
+                HashMap::from([("transform".to_owned(), "translate(-410 -498)".to_owned())]);
+            insert_document_icon(&mut icon, color);
+            svg.children.push(XMLNode::Element(icon));
+        }
+    }
 }
 
-fn insert_invoice_wordmark(svg: &mut Element) {
+fn insert_bottom_frame(svg: &mut Element, layout: LogoLayout, color: &str) {
+    if layout == LogoLayout::Print {
+        super::insert_outline(svg, color);
+    }
+}
+
+fn insert_left_frame(svg: &mut Element, layout: LogoLayout, color: &str) {
+    if layout != LogoLayout::Print {
+        return;
+    }
+
+    let mut mirror = Element::new("g");
+    mirror.attributes =
+        HashMap::from([("transform".to_owned(), "matrix(-1 0 0 1 600 0)".to_owned())]);
+    let mut right = Element::new("g");
+    right.attributes =
+        HashMap::from([("transform".to_owned(), "matrix(0 -1 1 0 0 512)".to_owned())]);
+    super::insert_outline(&mut right, color);
+    mirror.children.push(XMLNode::Element(right));
+    svg.children.push(XMLNode::Element(mirror));
+}
+
+fn insert_right_frame(svg: &mut Element, layout: LogoLayout, color: &str) {
+    if layout != LogoLayout::Print {
+        return;
+    }
+
+    let mut frame = Element::new("g");
+    frame.attributes =
+        HashMap::from([("transform".to_owned(), "matrix(0 -1 1 0 0 512)".to_owned())]);
+    super::insert_outline(&mut frame, color);
+    svg.children.push(XMLNode::Element(frame));
+}
+
+fn bottom_branding(color: &str, by_square_color: &str) -> Element {
+    let mut group = bottom_wordmarks(color, by_square_color);
+    insert_document_icon(&mut group, color);
+    group
+}
+
+fn bottom_wordmarks(color: &str, by_square_color: &str) -> Element {
+    let mut group = Element::new("g");
+    insert_invoice_wordmark(&mut group, color);
+    insert_by_square_wordmark(&mut group, by_square_color);
+    group
+}
+
+fn insert_invoice_wordmark(svg: &mut Element, color: &str) {
     // Hand-built, font-independent uppercase glyphs. Bounds: 155 x 29 at
     // (16, 540), aligned with the baseline of the existing by-square path.
     let mut path = Element::new("path");
     path.attributes = HashMap::from([
-        ("fill".to_string(), ACCENT_COLOR.to_string()),
+        ("fill".to_string(), color.to_string()),
         ("fill-rule".to_string(), "evenodd".to_string()),
         (
             "d".to_string(),
@@ -62,17 +160,17 @@ fn insert_invoice_wordmark(svg: &mut Element) {
     svg.children.push(XMLNode::Element(path));
 }
 
-fn insert_by_square_wordmark(svg: &mut Element) {
+fn insert_by_square_wordmark(svg: &mut Element, color: &str) {
     // Reuse the parent's font-independent by-square outline. The parent path
     // starts at x=193 for the shorter PAY label; shift it left to x=185 to
     // preserve the spacing seen in the Invoice reference.
     let mut group = Element::new("g");
     group.attributes = HashMap::from([("transform".to_string(), "translate(-8,0)".to_string())]);
-    super::insert_by_square_text(&mut group, BY_SQUARE_COLOR);
+    super::insert_by_square_text(&mut group, color);
     svg.children.push(XMLNode::Element(group));
 }
 
-fn insert_document_icon(svg: &mut Element) {
+fn insert_document_icon(svg: &mut Element, color: &str) {
     // Bounds: x=414..508, y=502..596. This stays entirely below and to the
     // right of the open ends of the frame and outside the QR quiet area.
     let mut group = Element::new("g");
@@ -84,7 +182,7 @@ fn insert_document_icon(svg: &mut Element) {
         ("width".to_string(), "94".to_string()),
         ("height".to_string(), "94".to_string()),
         ("rx".to_string(), "17".to_string()),
-        ("fill".to_string(), ACCENT_COLOR.to_string()),
+        ("fill".to_string(), color.to_string()),
     ]);
     group.children.push(XMLNode::Element(background));
 
@@ -121,26 +219,62 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decoration_has_four_non_qr_layers() {
+    fn default_decoration_contains_frame_and_branding_groups() {
         let mut svg = Element::new("svg");
 
-        decorate(&mut svg);
+        decorate(&mut svg, InvoiceTheme::default());
 
-        assert_eq!(svg.children.len(), 4);
+        assert_eq!(svg.children.len(), 2);
     }
 
     #[test]
-    fn recommended_qr_dimension_preserves_large_canvas_clearance() {
+    fn qr_dimension_preserves_frame_clearance_around_the_quiet_zone() {
         let clearance = (super::super::CONTAINER_WIDTH as u32 - QR_MAX_DIMENSION) / 2;
-        assert_eq!(clearance, 48);
+        assert_eq!(clearance, 4);
     }
 
     #[test]
     fn complete_invoice_svg_contains_vector_branding() {
         let svg = String::from_utf8(super::super::create_invoice_svg("INVOICE-FIXTURE")).unwrap();
 
-        assert!(svg.contains(ACCENT_COLOR));
+        assert!(svg.contains(InvoiceColor::Dark.hex()));
         assert!(svg.contains("M440 516h25l14 14v50h-39z"));
         assert!(!svg.contains("<text"));
+    }
+
+    #[test]
+    fn legacy_entry_point_uses_the_default_invoice_theme() {
+        let legacy = super::super::create_invoice_svg("INVOICE-FIXTURE");
+        let explicit =
+            super::super::create_invoice_svg_with_theme("INVOICE-FIXTURE", InvoiceTheme::default());
+        assert_eq!(
+            Element::parse(legacy.as_slice()).unwrap(),
+            Element::parse(explicit.as_slice()).unwrap()
+        );
+    }
+
+    #[test]
+    fn every_manual_theme_has_expected_dimensions_color_and_frame() {
+        for layout in LogoLayout::ALL {
+            for position in LogoPosition::ALL {
+                for color in InvoiceColor::ALL {
+                    let theme = InvoiceTheme::new(layout, position, color);
+                    let svg = String::from_utf8(super::super::create_invoice_svg_with_theme(
+                        "INVOICE-THEME",
+                        theme,
+                    ))
+                    .unwrap();
+                    let (width, height) = theme.dimensions();
+
+                    assert!(svg.contains(&format!("viewBox=\"0 0 {width} {height}\"")));
+                    assert!(svg.contains(color.hex()));
+                    assert_eq!(svg.contains(BY_SQUARE_COLOR), color != InvoiceColor::Black);
+                    assert_eq!(
+                        svg.contains("stroke-width=\"8\""),
+                        layout == LogoLayout::Print
+                    );
+                }
+            }
+        }
     }
 }

@@ -73,6 +73,27 @@ fn extracts_payload_and_decodes_generated_invoice_png() {
 }
 
 #[test]
+fn every_invoice_theme_remains_scannable() {
+    let expected = fixture_invoice();
+    let payload = invoice::encode(&expected).unwrap();
+
+    for layout in qr::LogoLayout::ALL {
+        for position in qr::LogoPosition::ALL {
+            for color in qr::InvoiceColor::ALL {
+                let theme = qr::InvoiceTheme::new(layout, position, color);
+                let svg = qr::create_invoice_svg_with_theme(&payload, theme);
+                let png = qr::render_png(&svg, 1_024);
+                assert_eq!(
+                    qr_reader::decode_document_from_bytes(&png).unwrap(),
+                    Document::Invoice(Box::new(expected.clone())),
+                    "failed to scan {theme:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn extracts_payload_and_decodes_generated_invoice_items_png() {
     let expected = fixture_invoice_items();
     let payload = invoice_items::encode(&expected).unwrap();

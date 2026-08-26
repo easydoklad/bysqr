@@ -55,7 +55,66 @@ fn encodes_canonical_invoice_json_with_invoice_branding() {
     );
     let svg = String::from_utf8(output.stdout).unwrap();
     assert!(svg.starts_with("<svg"));
-    assert!(svg.contains("#f78f1e"));
+    assert!(svg.contains("#F5871F"));
+}
+
+#[test]
+fn applies_invoice_theme_options() {
+    let source = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/invoice/schema/minimal-header-invoice.json"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        .args([
+            "encode",
+            "--src",
+            source,
+            "--format",
+            "svg",
+            "--invoice-layout",
+            "electronic",
+            "--invoice-position",
+            "left",
+            "--invoice-color",
+            "gray",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let svg = String::from_utf8(output.stdout).unwrap();
+    assert!(svg.contains("viewBox=\"0 0 600 512\""));
+    assert!(svg.contains("#5F6062"));
+    assert!(!svg.contains("stroke-width=\"8\""));
+}
+
+#[test]
+fn rejects_invoice_theme_options_for_other_document_families() {
+    let source = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pay/json/standing-order.json"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        .args([
+            "encode",
+            "--src",
+            source,
+            "--format",
+            "svg",
+            "--invoice-color",
+            "black",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("only apply to INVOICE documents"));
 }
 
 #[test]

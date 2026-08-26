@@ -13,6 +13,106 @@ mod items;
 pub const CONTAINER_WIDTH: f32 = 512.0;
 pub const CONTAINER_HEIGHT: f32 = 600.0;
 
+/// Approved INVOICE by square logo composition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LogoLayout {
+    /// Framed composition intended for print and general-purpose output.
+    Print,
+    /// Compact composition without the surrounding frame, intended for screens.
+    Electronic,
+}
+
+/// Approved placement of the by-square branding around the QR matrix.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LogoPosition {
+    Bottom,
+    Top,
+    Left,
+    Right,
+}
+
+/// Approved INVOICE by square color variation from the logo manual.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InvoiceColor {
+    Light,
+    Dark,
+    Gray,
+    Black,
+}
+
+impl InvoiceColor {
+    pub const ALL: [Self; 4] = [Self::Light, Self::Dark, Self::Gray, Self::Black];
+
+    pub const fn hex(self) -> &'static str {
+        match self {
+            Self::Light => "#FAB65B",
+            Self::Dark => "#F5871F",
+            Self::Gray => "#5F6062",
+            Self::Black => "#000000",
+        }
+    }
+}
+
+impl LogoLayout {
+    pub const ALL: [Self; 2] = [Self::Print, Self::Electronic];
+}
+
+impl LogoPosition {
+    pub const ALL: [Self; 4] = [Self::Bottom, Self::Top, Self::Left, Self::Right];
+}
+
+/// One logo-manual-compliant INVOICE by square visual theme.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvoiceTheme {
+    pub layout: LogoLayout,
+    pub position: LogoPosition,
+    pub color: InvoiceColor,
+}
+
+impl InvoiceTheme {
+    pub const fn new(layout: LogoLayout, position: LogoPosition, color: InvoiceColor) -> Self {
+        Self {
+            layout,
+            position,
+            color,
+        }
+    }
+
+    /// SVG canvas dimensions. Side branding swaps the portrait dimensions.
+    pub const fn dimensions(self) -> (u32, u32) {
+        match self.position {
+            LogoPosition::Bottom | LogoPosition::Top => {
+                (CONTAINER_WIDTH as u32, CONTAINER_HEIGHT as u32)
+            }
+            LogoPosition::Left | LogoPosition::Right => {
+                (CONTAINER_HEIGHT as u32, CONTAINER_WIDTH as u32)
+            }
+        }
+    }
+
+    const fn qr_center(self) -> (f32, f32) {
+        match self.position {
+            LogoPosition::Bottom | LogoPosition::Right => {
+                (CONTAINER_WIDTH / 2.0, CONTAINER_WIDTH / 2.0)
+            }
+            LogoPosition::Top => (
+                CONTAINER_WIDTH / 2.0,
+                CONTAINER_HEIGHT - CONTAINER_WIDTH / 2.0,
+            ),
+            LogoPosition::Left => (
+                CONTAINER_HEIGHT - CONTAINER_WIDTH / 2.0,
+                CONTAINER_WIDTH / 2.0,
+            ),
+        }
+    }
+}
+
+impl Default for InvoiceTheme {
+    fn default() -> Self {
+        Self::new(LogoLayout::Print, LogoPosition::Bottom, InvoiceColor::Dark)
+    }
+}
+
 pub struct Theme {
     background_color: String,
     outline_color: String,
@@ -33,12 +133,12 @@ impl Default for Theme {
     }
 }
 
-fn insert_background(svg: &mut Element, color: &str) {
+fn insert_background(svg: &mut Element, color: &str, width: u32, height: u32) {
     let mut path = Element::new("rect");
     path.attributes = HashMap::from([
         ("fill".to_string(), color.to_string()),
-        ("width".to_string(), format!("{}", CONTAINER_WIDTH as u32)),
-        ("height".to_string(), format!("{}", CONTAINER_HEIGHT as u32)),
+        ("width".to_string(), width.to_string()),
+        ("height".to_string(), height.to_string()),
     ]);
     svg.children.push(xmltree::XMLNode::Element(path));
 }
@@ -123,7 +223,7 @@ fn insert_outline(svg: &mut Element, color: &str) {
     svg.children.push(xmltree::XMLNode::Element(path));
 }
 
-fn insert_qr_content(svg: &mut Element, qr: &str) {
+fn insert_qr_content(svg: &mut Element, qr: &str, center_x: f32, center_y: f32) {
     let qr_svg =
         Element::parse(qr.as_bytes()).expect("unable to parse SVG content from QR encoder");
 
@@ -148,8 +248,8 @@ fn insert_qr_content(svg: &mut Element, qr: &str) {
         .get("d")
         .expect("unable to find d attribute within QR code");
 
-    let translate_x = (CONTAINER_WIDTH / 2.0) - (qr_width / 2.0);
-    let translate_y = (CONTAINER_WIDTH / 2.0) - (qr_height / 2.0);
+    let translate_x = center_x - (qr_width / 2.0);
+    let translate_y = center_y - (qr_height / 2.0);
 
     let mut path = Element::new("path");
     path.attributes = HashMap::from([
@@ -162,19 +262,16 @@ fn insert_qr_content(svg: &mut Element, qr: &str) {
     svg.children.push(xmltree::XMLNode::Element(path));
 }
 
-fn create_empty_svg() -> Element {
+fn create_empty_svg(width: u32, height: u32) -> Element {
     let mut final_svg = Element::new("svg");
     final_svg.attributes = HashMap::from([
         (
             "xmlns".to_string(),
             "http://www.w3.org/2000/svg".to_string(),
         ),
-        ("width".to_string(), format!("{}", CONTAINER_WIDTH)),
-        ("height".to_string(), format!("{}", CONTAINER_HEIGHT)),
-        (
-            "viewBox".to_string(),
-            format!("0 0 {} {}", CONTAINER_WIDTH, CONTAINER_HEIGHT),
-        ),
+        ("width".to_string(), width.to_string()),
+        ("height".to_string(), height.to_string()),
+        ("viewBox".to_string(), format!("0 0 {width} {height}")),
     ]);
     final_svg
 }
@@ -191,9 +288,19 @@ pub fn create_pay_svg(content: &str, theme: Theme) -> Vec<u8> {
         .quiet_zone(false)
         .build();
 
-    let mut svg = create_empty_svg();
-    insert_background(&mut svg, &theme.background_color);
-    insert_qr_content(&mut svg, &svg_image);
+    let mut svg = create_empty_svg(CONTAINER_WIDTH as u32, CONTAINER_HEIGHT as u32);
+    insert_background(
+        &mut svg,
+        &theme.background_color,
+        CONTAINER_WIDTH as u32,
+        CONTAINER_HEIGHT as u32,
+    );
+    insert_qr_content(
+        &mut svg,
+        &svg_image,
+        CONTAINER_WIDTH / 2.0,
+        CONTAINER_WIDTH / 2.0,
+    );
     insert_outline(&mut svg, &theme.outline_color);
     insert_pay_icon(&mut svg, &theme.icon_color);
     insert_by_square_text(&mut svg, &theme.by_square_text_color);
@@ -208,19 +315,26 @@ pub fn create_pay_svg(content: &str, theme: Theme) -> Vec<u8> {
 
 /// Render an INVOICE by square payload with the standard orange branding.
 pub fn create_invoice_svg(content: &str) -> Vec<u8> {
+    create_invoice_svg_with_theme(content, InvoiceTheme::default())
+}
+
+/// Render an INVOICE by square payload using one approved logo-manual theme.
+pub fn create_invoice_svg_with_theme(content: &str, theme: InvoiceTheme) -> Vec<u8> {
     let code = QrCode::with_error_correction_level(content.as_bytes(), EcLevel::L)
         .expect("unable to create QR code");
 
     let svg_image = code
         .render::<svg::Color>()
         .max_dimensions(invoice::QR_MAX_DIMENSION, invoice::QR_MAX_DIMENSION)
-        .quiet_zone(false)
+        .quiet_zone(true)
         .build();
 
-    let mut svg = create_empty_svg();
-    insert_background(&mut svg, "#ffffff");
-    insert_qr_content(&mut svg, &svg_image);
-    invoice::decorate(&mut svg);
+    let (width, height) = theme.dimensions();
+    let (center_x, center_y) = theme.qr_center();
+    let mut svg = create_empty_svg(width, height);
+    insert_background(&mut svg, "#ffffff", width, height);
+    insert_qr_content(&mut svg, &svg_image, center_x, center_y);
+    invoice::decorate(&mut svg, theme);
 
     let mut qr = Vec::new();
     let emitter_options = EmitterConfig::default().write_document_declaration(false);
@@ -240,9 +354,19 @@ pub fn create_invoice_items_svg(content: &str) -> Vec<u8> {
         .quiet_zone(false)
         .build();
 
-    let mut svg = create_empty_svg();
-    insert_background(&mut svg, "#ffffff");
-    insert_qr_content(&mut svg, &svg_image);
+    let mut svg = create_empty_svg(CONTAINER_WIDTH as u32, CONTAINER_HEIGHT as u32);
+    insert_background(
+        &mut svg,
+        "#ffffff",
+        CONTAINER_WIDTH as u32,
+        CONTAINER_HEIGHT as u32,
+    );
+    insert_qr_content(
+        &mut svg,
+        &svg_image,
+        CONTAINER_WIDTH / 2.0,
+        CONTAINER_WIDTH / 2.0,
+    );
     items::decorate(&mut svg);
 
     let mut qr = Vec::new();
@@ -254,11 +378,10 @@ pub fn create_invoice_items_svg(content: &str) -> Vec<u8> {
 
 pub fn map_svg(svg: &[u8], size: u32) -> Pixmap {
     let svg_tree = Tree::from_data(svg, &Options::default()).unwrap();
-
-    let scale: f32 = size as f32 / CONTAINER_WIDTH;
-
+    let source_size = svg_tree.size();
+    let scale = size as f32 / source_size.width();
     let width: u32 = size;
-    let height: u32 = (CONTAINER_HEIGHT * scale) as u32;
+    let height = (source_size.height() * scale).round() as u32;
 
     let mut pixmap = Pixmap::new(width, height).expect("unable to create pixmap");
     resvg::render(
