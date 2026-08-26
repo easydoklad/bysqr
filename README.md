@@ -379,19 +379,23 @@ sudo apt install -y build-essential clang
 
 #### Building for wasm on macOS
 
-Apple clang is not supported when building for wasm target and you have to instal `llvm` instead.
+Apple's system clang does not provide the `wasm32-unknown-unknown` target needed
+to compile the bundled LZMA C library. Install Homebrew LLVM and make sure its
+clang appears before `/usr/bin/clang` when running `wasm-pack`.
 
 ```shell
-# Install llvm
 brew install llvm
 
-# Add llvm to $PATH, you may place it to .zshrc
-export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
-export LDFLAGS="-L/opt/homebrew/opt/llvm/lib"
-export CPPFLAGS="-I/opt/homebrew/opt/llvm/include"
+# These can be placed in ~/.zshrc.
+export PATH="$(brew --prefix llvm)/bin:$PATH"
+export LDFLAGS="-L$(brew --prefix llvm)/lib"
+export CPPFLAGS="-I$(brew --prefix llvm)/include"
 
-# Verify installation
-llvm-config --version
+# Must report Homebrew clang, not Apple clang from /usr/bin.
+which clang
+clang --version
+
+wasm-pack build --target web --features wasm
 ```
 
 ## Roadmap to v1.0
