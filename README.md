@@ -405,7 +405,7 @@ Before building for `wasm` target, install the same pinned wasm-pack release use
 by CI.
 
 ```shell
-cargo install wasm-pack --version 0.13.1 --locked
+cargo install wasm-pack --version 0.15.0 --locked
 ```
 
 Build the web package and run the complete Node boundary suite with one command:

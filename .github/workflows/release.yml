@@ -16,7 +16,7 @@ jobs:
         arch: [ x86_64, aarch64 ]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Configure
         if: matrix.arch == 'x86_64'
         run: |
@@ -39,7 +39,7 @@ jobs:
           cargo build --release --bin bysqrcli --target $TARGET --features preview
           cp target/$TARGET/release/bysqrcli target/dist/$DIST
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           files: target/dist/*
@@ -53,7 +53,7 @@ jobs:
         arch: [ x86_64, aarch64 ]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Configure
         if: matrix.arch == 'x86_64'
         run: |
@@ -78,7 +78,7 @@ jobs:
           cargo build --release --bin bysqrcli --target $TARGET --features preview
           cp target/$TARGET/release/bysqrcli target/dist/$DIST
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           files: target/dist/*
@@ -89,11 +89,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Configure
         run: |
           sudo apt-get install -y build-essential clang
-          cargo install wasm-pack --version 0.13.1 --locked
+          cargo install wasm-pack --version 0.15.0 --locked
           rustup target add wasm32-unknown-unknown
       - name: Build and test
         run: ./scripts/test-wasm.sh
@@ -118,7 +118,7 @@ jobs:
           cd target/dist
           sha256sum "${DIST_NAME}.tar.gz" > "${DIST_NAME}.tar.gz.sha256"
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           files: target/dist/*
@@ -132,7 +132,7 @@ jobs:
         arch: [ x86_64, aarch64 ]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Configure
         if: matrix.arch == 'x86_64'
         run: |
@@ -155,7 +155,7 @@ jobs:
           cargo build --release --bin bysqrcli --target $env:TARGET --features preview
           Copy-Item "target\$env:TARGET\release\bysqrcli.exe" "target\dist\$env:DIST"
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           files: target/dist/*
