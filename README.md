@@ -346,30 +346,25 @@ INVOICE and ITEMS raster output can be scanned back into typed data.
 
 `bysqr` can be built for Web Assembly target, which allows you to run encoder and decoder in the browser, without need for a server.
 
-Before building for `wasm` target, you need to install `wasm-pack`.
+The stable low-level API, structured error shape, render options, and distinction
+between source encoding and payload rendering are documented in
+[`docs/wasm.md`](docs/wasm.md).
+
+Before building for `wasm` target, install the same pinned wasm-pack release used
+by CI.
 
 ```shell
-cargo install wasm-pack
+cargo install wasm-pack --version 0.13.1 --locked
 ```
 
-After installing, you can start build:
+Build the web package and run the complete Node boundary suite with one command:
 
 ```shell
-wasm-pack build --target web --features wasm
+./scripts/test-wasm.sh
 ```
 
-Built wasm module will be located in `pkg` folder.
-
-To include raster QR reading, enable both features:
-
-```shell
-wasm-pack build --target web --features wasm,qr-reader
-```
-
-This additionally exports `decode_image_to_json` and `decode_image_to_xml`,
-which accept PNG or JPEG bytes and classify PAY, INVOICE or INVOICE ITEMS
-documents. The text-only encoding and decoding exports support all three
-families without the QR reader.
+The generated module will be located in `pkg`. The test suite initializes it
+from explicit WASM bytes and exercises the complete SDK ABI.
 
 #### Building for wasm on Ubuntu
 

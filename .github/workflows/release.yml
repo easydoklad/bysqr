@@ -93,13 +93,30 @@ jobs:
       - name: Configure
         run: |
           sudo apt-get install -y build-essential clang
-          cargo install wasm-pack
+          cargo install wasm-pack --version 0.13.1 --locked
           rustup target add wasm32-unknown-unknown
-      - name: Build
+      - name: Build and test
+        run: ./scripts/test-wasm.sh
+      - name: Package
         run: |
           mkdir -p target/dist
-          wasm-pack build --target web --features wasm
-          tar -czf target/dist/bysqr-wasm.tar.gz pkg/*
+          CRATE_VERSION="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "bysqr") | .version')"
+          DIST_NAME="bysqr-wasm-${CRATE_VERSION}-web"
+          mkdir -p "target/wasm-artifact/${DIST_NAME}/schemas"
+          cp pkg/bysqr.js pkg/bysqr.d.ts pkg/bysqr_bg.wasm pkg/bysqr_bg.wasm.d.ts pkg/package.json "target/wasm-artifact/${DIST_NAME}/"
+          cp docs/wasm.md "target/wasm-artifact/${DIST_NAME}/README.md"
+          cp LICENSE.md "target/wasm-artifact/${DIST_NAME}/LICENSE"
+          cp spec/pay-by-square.schema.json "target/wasm-artifact/${DIST_NAME}/schemas/"
+          cp spec/invoice-by-square.schema.json "target/wasm-artifact/${DIST_NAME}/schemas/"
+          cp spec/invoice-items-by-square.schema.json "target/wasm-artifact/${DIST_NAME}/schemas/"
+          cp spec/invoice-items-list.schema.json "target/wasm-artifact/${DIST_NAME}/schemas/"
+          jq -n \
+            --arg rustCrateVersion "${CRATE_VERSION}" \
+            '{wasmApiVersion: 1, rustCrateVersion: $rustCrateVersion, target: "web", features: ["wasm"]}' \
+            > "target/wasm-artifact/${DIST_NAME}/manifest.json"
+          tar -C target/wasm-artifact -czf "target/dist/${DIST_NAME}.tar.gz" "${DIST_NAME}"
+          cd target/dist
+          sha256sum "${DIST_NAME}.tar.gz" > "${DIST_NAME}.tar.gz.sha256"
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
