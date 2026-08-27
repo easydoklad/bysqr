@@ -49,6 +49,9 @@ XML/JSON document. You can pass either a file path or the document itself. The
 document root, `DocumentType`, or Items marker fields select the correct
 encoder and QR branding automatically.
 
+Pass `--src -` to read textual source data from standard input. This transport
+is available for `encode`, `decode`, `encode-items` and `decode-items`.
+
 #### JSON input
 
 The canonical JSON structure mirrors `spec/bysquare.xsd`: element names remain
@@ -96,6 +99,11 @@ describes the separate type-2 blocks used by multi-line invoices. Each block
 contains the parent `InvoiceID`, its `FirstInvoiceLineID`, and an explicit
 `InvoiceLines.InvoiceLine` array. A line uses exactly one of `ItemName` and
 `ItemEANCode`; an optional billing period must contain both dates.
+
+The separate [InvoiceItemsList JSON Schema](spec/invoice-items-list.schema.json)
+describes a complete ordered application-level item list. It contains
+`InvoiceID` and `InvoiceLines`, but deliberately has no `FirstInvoiceLineID`;
+that position belongs only to each encoded QR block.
 
 Computed XSD properties are optional read-only values in the JSON Schema and
 are not transported in the QR sequence. Use `Invoice::calculate_totals` and
@@ -170,6 +178,42 @@ The default quality is set to **90**.
 ```shell
 bysqr encode --src payment.xml --format jpeg --quality 95
 ```
+
+### Batch INVOICE ITEMS
+
+`encode-items` accepts one complete `InvoiceItemsList` JSON/XML document and
+splits it into the specification's recommended four-line QR blocks. INVOICE
+ITEMS uses its fixed official black branding and has no theme options.
+
+```shell
+# stdout is a JSON array containing one SVG string per QR block
+bysqr encode-items --src invoice-items-list.json --format svg
+
+# write invoice-items-001.png, invoice-items-002.png, ...
+bysqr encode-items --src invoice-items-list.json --format png --save items-qr
+
+# stdin is useful for process wrappers
+cat invoice-items-list.json | bysqr encode-items --src - --format jpeg
+```
+
+Without `--save`, SVG output is a JSON array of SVG strings and PNG/JPEG output
+is a JSON array of Base64 data URLs. With `--save`, the destination is a
+directory. Existing generated files are rejected unless `--overwrite` is
+provided.
+
+`decode-items` accepts a JSON array containing the textual contents scanned
+from all related QR codes. Block order does not matter; gaps, overlaps and
+mixed `InvoiceID` values are rejected. The result is one `InvoiceItemsList`
+JSON/XML document.
+
+```shell
+bysqr decode-items --src scanned-payloads.json --format json
+cat scanned-payloads.json | bysqr decode-items --src - --format xml
+```
+
+Both batch commands optionally accept `--invoice-src invoice.json`. This asks
+the Rust core to verify the aggregate `InvoiceID` and item count against the
+parent INVOICE `NumberOfInvoiceLines` before producing output.
 
 ### Decoding a payload
 
@@ -278,21 +322,22 @@ The resulting `target/theme-preview.html` compares PAY and INVOICE across all
 fixed to its black composition.
 
 INVOICE ITEMS exposes both individual-block and complete-list APIs. The
-convenience encoder follows the specification's conservative recommendation of
-four lines per QR; the decoder also accepts larger deployed blocks:
+`InvoiceItemsList` aggregate has no `FirstInvoiceLineID`; chunking assigns that
+block-local value automatically. The convenience encoder follows the
+specification's conservative recommendation of four lines per QR, while the
+decoder also accepts larger deployed blocks:
 
 ```rust
-use bysqr::invoice_items;
+use bysqr::invoice_items::{self, InvoiceItemsList};
 
-let source = include_str!("invoice-items.json");
-let block = invoice_items::try_deserialize_invoice_items(source)?;
-let lines = block.invoice_lines.invoice_line.clone();
+let list: InvoiceItemsList = serde_json::from_str(include_str!(
+    "invoice-items-list.json"
+))?;
 
-let payloads = invoice_items::encode_chunks(block.invoice_id.clone(), lines.clone())?;
+let payloads = list.encode_chunks()?;
 let reassembled = invoice_items::decode_chunks(&payloads)?;
-assert_eq!(reassembled.invoice_id, block.invoice_id);
-assert_eq!(reassembled.invoice_lines, lines);
-# Ok::<(), bysqr::error::Error>(())
+assert_eq!(reassembled, list);
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 When the parent `invoice::Invoice` is available, call
@@ -310,7 +355,9 @@ as `bysqr::pay::JSON_SCHEMA` for consumers that want to validate JSON before
 encoding it. INVOICE provides the corresponding `invoice::encode_sequence`,
 `invoice::decode_sequence` and `invoice::JSON_SCHEMA` APIs. INVOICE ITEMS
 provides `invoice_items::encode_sequence`, `invoice_items::decode_sequence`,
-`invoice_items::JSON_SCHEMA`, plus chunking and strict reassembly helpers.
+`invoice_items::JSON_SCHEMA` for one QR block,
+`invoice_items::JSON_SCHEMA_LIST` for the aggregate, plus chunking and strict
+reassembly helpers.
 
 The PAY and INVOICE domain `encode` and `encode_sequence` functions enforce the
 550-character QR limit. For non-QR transport use the domain's

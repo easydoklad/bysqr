@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+
+- Application-level `InvoiceItemsList` model with canonical JSON/XML,
+  standalone JSON Schema, chunk encoding and strict reassembly.
+- Native CLI stdin transport through `--src -`.
+- Batch `encode-items` and `decode-items` CLI workflows with optional parent
+  INVOICE validation.
+- Versioned WASM bridge contract, structured JavaScript errors and browser
+  boundary tests.
+
+### Changed
+
+- WASM release archives now include an explicit manifest, schemas,
+  documentation and checksums.
+
 ## 0.1.0 - 2026-08-27
 
 First feature-complete encoder/decoder preview release.

@@ -35,7 +35,7 @@ retains the PascalCase field names defined by the JSON Schemas.
 {"type":"invoiceItems","value":{}}
 ```
 
-The chunk decoder returns this canonical shape:
+The chunk decoder returns the canonical `InvoiceItemsList` shape:
 
 ```json
 {"InvoiceID":"...","InvoiceLines":{"InvoiceLine":[]}}
