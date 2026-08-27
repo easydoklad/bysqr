@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.2.1 - 2026-08-27
+
+### Changed
+
+- macOS release binaries are signed with Developer ID and notarized by Apple.
+
 ## 0.2.0 - 2026-08-27
 
 ### Added
