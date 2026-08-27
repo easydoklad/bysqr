@@ -7,7 +7,12 @@ use std::{
 
 #[cfg(feature = "qr-reader")]
 use bysqr::qr_reader;
-use bysqr::{document, qr, Document};
+use bysqr::{
+    document,
+    invoice::{self, Invoice},
+    invoice_items::{self, InvoiceItemsList},
+    qr, Document,
+};
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[path = "../preview.rs"]
@@ -68,6 +73,42 @@ enum Commands {
         #[arg(long = "format", value_enum, default_value_t = DataFormat::Json)]
         format: DataFormat,
     },
+    EncodeItems {
+        #[arg(long = "src")]
+        src: String,
+
+        #[arg(long = "format", value_enum)]
+        format: ImageFormat,
+
+        #[arg(long = "size", default_value = "512")]
+        size: u32,
+
+        #[arg(long = "quality", default_value = "90")]
+        quality: u8,
+
+        /// Directory for deterministic invoice-items-NNN output files.
+        #[arg(long = "save")]
+        save: Option<PathBuf>,
+
+        #[arg(long = "overwrite")]
+        overwrite: bool,
+
+        /// Canonical parent INVOICE JSON/XML, inline or as a file path.
+        #[arg(long = "invoice-src")]
+        invoice_src: Option<String>,
+    },
+    DecodeItems {
+        /// JSON array of textual INVOICE ITEMS QR payloads.
+        #[arg(long = "src")]
+        src: String,
+
+        #[arg(long = "format", value_enum, default_value_t = DataFormat::Json)]
+        format: DataFormat,
+
+        /// Canonical parent INVOICE JSON/XML, inline or as a file path.
+        #[arg(long = "invoice-src")]
+        invoice_src: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -98,11 +139,22 @@ enum LogoColorArg {
     Black,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum ImageFormat {
     Svg,
     Png,
+    #[value(alias = "jpg")]
     Jpeg,
+}
+
+impl ImageFormat {
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Svg => "svg",
+            Self::Png => "png",
+            Self::Jpeg => "jpeg",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -171,6 +223,51 @@ fn read_source(source: &str) -> Result<String, io::Error> {
 
 fn deserialize_document(source: &str) -> Result<Document, Box<dyn Error>> {
     Ok(document::try_deserialize(&read_source(source)?)?)
+}
+
+fn deserialize_invoice_items_list(source: &str) -> Result<InvoiceItemsList, Box<dyn Error>> {
+    let input = read_source(source)?;
+    let input = input.trim_start();
+
+    if input.starts_with('<') {
+        return InvoiceItemsList::from_xml_str(input).map_err(|error| {
+            cli_error(format!(
+                "unable to deserialize InvoiceItemsList XML: {error}"
+            ))
+            .into()
+        });
+    }
+    if input.starts_with('{') {
+        return serde_json::from_str(input).map_err(|error| {
+            cli_error(format!(
+                "unable to deserialize InvoiceItemsList JSON: {error}"
+            ))
+            .into()
+        });
+    }
+
+    Err(cli_error("expected an InvoiceItemsList XML document or JSON object").into())
+}
+
+fn deserialize_invoice(source: &str) -> Result<Invoice, Box<dyn Error>> {
+    if source == "-" {
+        return Err(
+            cli_error("--invoice-src - is not supported; standard input belongs to --src").into(),
+        );
+    }
+
+    invoice::try_deserialize_invoice(&read_source(source)?)
+        .map_err(|error| cli_error(format!("unable to deserialize parent Invoice: {error}")).into())
+}
+
+fn validate_against_invoice(
+    items: &InvoiceItemsList,
+    invoice_source: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
+    if let Some(source) = invoice_source {
+        items.validate_against_invoice(&deserialize_invoice(source)?)?;
+    }
+    Ok(())
 }
 
 fn logo_theme(
@@ -294,6 +391,194 @@ fn run_decode(source: &str, format: &DataFormat) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn render_items_for_stdout(
+    payloads: &[String],
+    format: ImageFormat,
+    size: u32,
+    quality: u8,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    payloads
+        .iter()
+        .map(|payload| {
+            let svg = qr::create_invoice_items_svg(payload)?;
+            match format {
+                ImageFormat::Svg => Ok(String::from_utf8(svg)?),
+                ImageFormat::Png => Ok(qr::to_base64_png(&svg, size)?),
+                ImageFormat::Jpeg => Ok(qr::to_base64_jpeg(&svg, size, quality)?),
+            }
+        })
+        .collect()
+}
+
+fn render_items_for_files(
+    payloads: &[String],
+    format: ImageFormat,
+    size: u32,
+    quality: u8,
+) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
+    payloads
+        .iter()
+        .map(|payload| {
+            let svg = qr::create_invoice_items_svg(payload)?;
+            match format {
+                ImageFormat::Svg => Ok(svg),
+                ImageFormat::Png => Ok(qr::render_png(&svg, size)?),
+                ImageFormat::Jpeg => Ok(qr::render_jpeg(&svg, size, quality)?),
+            }
+        })
+        .collect()
+}
+
+fn is_generated_items_output(file_name: &str, extension: &str) -> bool {
+    let Some(index) = file_name
+        .strip_prefix("invoice-items-")
+        .and_then(|name| name.strip_suffix(&format!(".{extension}")))
+    else {
+        return false;
+    };
+
+    let Ok(index_value) = index.parse::<usize>() else {
+        return false;
+    };
+    index_value > 0 && format!("{index_value:03}") == index
+}
+
+fn save_items_outputs(
+    directory: &Path,
+    format: ImageFormat,
+    contents: &[Vec<u8>],
+    overwrite: bool,
+) -> Result<(), Box<dyn Error>> {
+    if directory.exists() && !directory.is_dir() {
+        return Err(cli_error(format!(
+            "batch output path {} must be a directory",
+            directory.display()
+        ))
+        .into());
+    }
+
+    let destinations = (1..=contents.len())
+        .map(|index| directory.join(format!("invoice-items-{index:03}.{}", format.extension())))
+        .collect::<Vec<_>>();
+
+    let existing_outputs = if directory.is_dir() {
+        fs::read_dir(directory)?
+            .filter_map(|entry| match entry {
+                Ok(entry)
+                    if entry.file_name().to_str().is_some_and(|name| {
+                        is_generated_items_output(name, format.extension())
+                    }) =>
+                {
+                    Some(Ok(entry.path()))
+                }
+                Ok(_) => None,
+                Err(error) => Some(Err(error)),
+            })
+            .collect::<Result<Vec<_>, io::Error>>()?
+    } else {
+        Vec::new()
+    };
+
+    if !overwrite {
+        if let Some(existing) = existing_outputs.first() {
+            return Err(cli_error(format!(
+                "generated batch output {} already exists; pass --overwrite to replace the batch",
+                existing.display()
+            ))
+            .into());
+        }
+    }
+
+    for destination in &destinations {
+        if destination.exists() && !overwrite {
+            return Err(cli_error(format!(
+                "output file {} already exists; pass --overwrite to replace the batch",
+                destination.display()
+            ))
+            .into());
+        }
+        if destination.is_dir() {
+            return Err(cli_error(format!(
+                "output path {} points to a directory",
+                destination.display()
+            ))
+            .into());
+        }
+    }
+
+    let stale_outputs = existing_outputs
+        .iter()
+        .filter(|existing| !destinations.contains(existing))
+        .collect::<Vec<_>>();
+    for stale in &stale_outputs {
+        if stale.is_dir() {
+            return Err(cli_error(format!(
+                "generated output path {} points to a directory",
+                stale.display()
+            ))
+            .into());
+        }
+    }
+
+    fs::create_dir_all(directory)?;
+    for stale in stale_outputs {
+        fs::remove_file(stale)?;
+    }
+    for (destination, content) in destinations.iter().zip(contents) {
+        fs::write(destination, content)?;
+    }
+    Ok(())
+}
+
+fn run_encode_items(
+    source: &str,
+    format: ImageFormat,
+    size: u32,
+    quality: u8,
+    destination: Option<&Path>,
+    overwrite: bool,
+    invoice_source: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
+    let items = deserialize_invoice_items_list(source)?;
+    validate_against_invoice(&items, invoice_source)?;
+    let payloads = items.encode_chunks()?;
+
+    if let Some(directory) = destination {
+        let contents = render_items_for_files(&payloads, format, size, quality)?;
+        save_items_outputs(directory, format, &contents, overwrite)?;
+    } else {
+        let output = render_items_for_stdout(&payloads, format, size, quality)?;
+        println!("{}", serde_json::to_string(&output)?);
+    }
+
+    Ok(())
+}
+
+fn run_decode_items(
+    source: &str,
+    format: &DataFormat,
+    invoice_source: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
+    let input = read_source(source)?;
+    let payloads: Vec<String> = serde_json::from_str(&input).map_err(|error| {
+        cli_error(format!(
+            "unable to deserialize INVOICE ITEMS payload array: {error}"
+        ))
+    })?;
+    if payloads.is_empty() {
+        return Err(cli_error("INVOICE ITEMS payload array must not be empty").into());
+    }
+
+    let items = invoice_items::decode_chunks(payloads.iter().map(|payload| payload.trim()))?;
+    validate_against_invoice(&items, invoice_source)?;
+    let output = match format {
+        DataFormat::Json => serde_json::to_string_pretty(&items)?,
+        DataFormat::Xml => items.to_xml_string()?,
+    };
+    println!("{output}");
+    Ok(())
+}
+
 fn decode_source(source: &str) -> Result<Document, Box<dyn Error>> {
     if source == "-" {
         return Ok(document::decode(read_source(source)?.trim())?);
@@ -348,7 +633,56 @@ fn run() -> Result<(), Box<dyn Error>> {
             },
         ),
         Some(Commands::Decode { src, format }) => run_decode(src, format),
+        Some(Commands::EncodeItems {
+            src,
+            format,
+            size,
+            quality,
+            save,
+            overwrite,
+            invoice_src,
+        }) => run_encode_items(
+            src,
+            *format,
+            *size,
+            *quality,
+            save.as_deref(),
+            *overwrite,
+            invoice_src.as_deref(),
+        ),
+        Some(Commands::DecodeItems {
+            src,
+            format,
+            invoice_src,
+        }) => run_decode_items(src, format, invoice_src.as_deref()),
         None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_generated_items_output;
+
+    #[test]
+    fn recognizes_only_deterministic_batch_output_names() {
+        for name in [
+            "invoice-items-001.svg",
+            "invoice-items-999.svg",
+            "invoice-items-1000.svg",
+        ] {
+            assert!(is_generated_items_output(name, "svg"), "{name}");
+        }
+
+        for name in [
+            "invoice-items-000.svg",
+            "invoice-items-01.svg",
+            "invoice-items-0001.svg",
+            "invoice-items-one.svg",
+            "invoice-items-001.png",
+            "other-001.svg",
+        ] {
+            assert!(!is_generated_items_output(name, "svg"), "{name}");
+        }
     }
 }
 
