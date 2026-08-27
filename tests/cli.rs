@@ -1,4 +1,7 @@
-use std::process::Command;
+use std::{
+    io::Write,
+    process::{Command, Output, Stdio},
+};
 
 use bysqr::{
     invoice, invoice_items,
@@ -14,6 +17,22 @@ struct Fixture {
 
 fn fixture() -> Fixture {
     serde_json::from_str(include_str!("fixtures/pay/valid-payment-order.json")).unwrap()
+}
+
+fn run_with_stdin(args: &[&str], input: &[u8]) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(input).unwrap();
+    drop(stdin);
+
+    child.wait_with_output().unwrap()
 }
 
 #[test]
@@ -35,6 +54,49 @@ fn encodes_canonical_json_file() {
     assert!(String::from_utf8(output.stdout)
         .unwrap()
         .starts_with("<svg"));
+}
+
+#[test]
+fn encodes_json_from_stdin_like_file_source() {
+    let source = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pay/json/standing-order.json"
+    );
+    let file_output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        .args(["encode", "--src", source, "--format", "svg"])
+        .output()
+        .unwrap();
+    let stdin_output = run_with_stdin(
+        &["encode", "--src", "-", "--format", "svg"],
+        &std::fs::read(source).unwrap(),
+    );
+
+    assert!(
+        file_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&file_output.stderr)
+    );
+    assert!(
+        stdin_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stdin_output.stderr)
+    );
+    let file_svg = xmltree::Element::parse(file_output.stdout.as_slice()).unwrap();
+    let stdin_svg = xmltree::Element::parse(stdin_output.stdout.as_slice()).unwrap();
+    assert_eq!(stdin_svg, file_svg);
+    assert_eq!(stdin_svg.name, "svg");
+}
+
+#[test]
+fn reports_malformed_json_from_stdin() {
+    let output = run_with_stdin(&["encode", "--src", "-", "--format", "svg"], b"{");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("unable to deserialize JSON"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -308,6 +370,33 @@ fn decodes_payload_to_json() {
         String::from_utf8_lossy(&output.stderr)
     );
     let decoded: Pay = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(decoded, try_deserialize_pay(&fixture.source).unwrap());
+}
+
+#[test]
+fn decodes_payload_from_stdin_like_inline_source() {
+    let fixture = fixture();
+    let inline_output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        .args(["decode", "--src", &fixture.payload, "--format", "json"])
+        .output()
+        .unwrap();
+    let stdin_output = run_with_stdin(
+        &["decode", "--src", "-", "--format", "json"],
+        fixture.payload.as_bytes(),
+    );
+
+    assert!(
+        inline_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&inline_output.stderr)
+    );
+    assert!(
+        stdin_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stdin_output.stderr)
+    );
+    assert_eq!(stdin_output.stdout, inline_output.stdout);
+    let decoded: Pay = serde_json::from_slice(&stdin_output.stdout).unwrap();
     assert_eq!(decoded, try_deserialize_pay(&fixture.source).unwrap());
 }
 

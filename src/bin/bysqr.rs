@@ -1,6 +1,7 @@
 use std::{
     error::Error,
-    fs, io,
+    fs,
+    io::{self, Read},
     path::{Path, PathBuf},
 };
 
@@ -157,7 +158,11 @@ fn guess_output_mode(
 }
 
 fn read_source(source: &str) -> Result<String, io::Error> {
-    if Path::new(source).is_file() {
+    if source == "-" {
+        let mut input = String::new();
+        io::stdin().read_to_string(&mut input)?;
+        Ok(input)
+    } else if Path::new(source).is_file() {
         fs::read_to_string(source)
     } else {
         Ok(source.to_owned())
@@ -290,6 +295,10 @@ fn run_decode(source: &str, format: &DataFormat) -> Result<(), Box<dyn Error>> {
 }
 
 fn decode_source(source: &str) -> Result<Document, Box<dyn Error>> {
+    if source == "-" {
+        return Ok(document::decode(read_source(source)?.trim())?);
+    }
+
     let path = Path::new(source);
     if !path.is_file() {
         return Ok(document::decode(source.trim())?);
