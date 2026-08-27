@@ -264,6 +264,22 @@ impl InvoiceLines {
     }
 }
 
+// Preserve the line-vector ergonomics of the former reassembly result now that
+// reassembly returns the canonical `InvoiceItemsList` aggregate.
+impl std::ops::Deref for InvoiceLines {
+    type Target = Vec<InvoiceLine>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.invoice_line
+    }
+}
+
+impl std::ops::DerefMut for InvoiceLines {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.invoice_line
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct InvoiceLine {

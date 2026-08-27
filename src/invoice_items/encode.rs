@@ -1,6 +1,6 @@
 //! INVOICE ITEMS by square sequence, payload, and chunk encoding.
 
-use super::models::{InvoiceItems, InvoiceLine, InvoiceLines};
+use super::models::{InvoiceItems, InvoiceItemsList, InvoiceLine, InvoiceLines};
 use crate::{
     codec::{self, Header},
     error::{Error, Result},
@@ -17,14 +17,15 @@ const HEADER: Header = Header {
     reserved: 0,
 };
 
-/// Reassembled semantic line set shared by one parent invoice.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReassembledInvoiceLines {
-    pub invoice_id: String,
-    pub invoice_lines: Vec<InvoiceLine>,
-}
+/// Compatibility name for a complete reassembled INVOICE ITEMS list.
+pub type ReassembledInvoiceLines = InvoiceItemsList;
 
-impl ReassembledInvoiceLines {
+impl InvoiceItemsList {
+    /// Chunk and encode this complete ordered list into INVOICE ITEMS payloads.
+    pub fn encode_chunks(&self) -> Result<Vec<String>> {
+        encode_invoice_items_list(self)
+    }
+
     /// Verify pairing and completeness against the parent multi-line Invoice.
     pub fn validate_against_invoice(
         &self,
@@ -48,12 +49,12 @@ impl ReassembledInvoiceLines {
                 "must be a non-negative count that fits usize",
             )
         })?;
-        if self.invoice_lines.len() != expected {
+        if self.invoice_lines.invoice_line.len() != expected {
             return Err(InvoiceModelError::invalid(
                 "InvoiceLines",
                 format!(
                     "parent Invoice declares {expected} lines, reassembled {}",
-                    self.invoice_lines.len()
+                    self.invoice_lines.invoice_line.len()
                 ),
             ));
         }
@@ -71,7 +72,14 @@ pub fn encode_chunks(
     invoice_id: impl Into<String>,
     invoice_lines: Vec<InvoiceLine>,
 ) -> Result<Vec<String>> {
-    chunk_invoice_lines(invoice_id, invoice_lines)
+    let list = InvoiceItemsList::new(invoice_id, InvoiceLines::new(invoice_lines))
+        .map_err(|error| Error::invalid(error.field(), error.message()))?;
+    encode_invoice_items_list(&list)
+}
+
+/// Chunk and encode a complete ordered INVOICE ITEMS aggregate.
+pub fn encode_invoice_items_list(document: &InvoiceItemsList) -> Result<Vec<String>> {
+    chunk_invoice_items_list(document)
         .map_err(|error| Error::invalid(error.field(), error.message()))?
         .iter()
         .map(encode)
@@ -126,23 +134,24 @@ pub fn chunk_invoice_lines(
     invoice_id: impl Into<String>,
     invoice_lines: Vec<InvoiceLine>,
 ) -> std::result::Result<Vec<InvoiceItems>, InvoiceModelError> {
-    let invoice_id = invoice_id.into();
-    if invoice_lines.is_empty() {
-        return Err(InvoiceModelError::invalid(
-            "InvoiceLines",
-            "must contain at least one InvoiceLine",
-        ));
-    }
-    for line in &invoice_lines {
-        line.validate()?;
-    }
+    let list = InvoiceItemsList::new(invoice_id, InvoiceLines::new(invoice_lines))?;
+    chunk_invoice_items_list(&list)
+}
 
-    invoice_lines
+/// Split a complete ordered aggregate into conservative four-line QR blocks.
+pub fn chunk_invoice_items_list(
+    document: &InvoiceItemsList,
+) -> std::result::Result<Vec<InvoiceItems>, InvoiceModelError> {
+    document.validate()?;
+
+    document
+        .invoice_lines
+        .invoice_line
         .chunks(RECOMMENDED_INVOICE_LINES_PER_QR)
         .enumerate()
         .map(|(index, chunk)| {
             InvoiceItems::new(
-                invoice_id.clone(),
+                document.invoice_id.clone(),
                 (index * RECOMMENDED_INVOICE_LINES_PER_QR + 1).to_string(),
                 InvoiceLines::new(chunk.to_vec()),
             )
@@ -153,7 +162,7 @@ pub fn chunk_invoice_lines(
 /// Sort and reassemble sequential blocks, rejecting mixed invoices, gaps, and overlaps.
 pub fn reassemble_invoice_lines(
     documents: impl IntoIterator<Item = InvoiceItems>,
-) -> std::result::Result<ReassembledInvoiceLines, InvoiceModelError> {
+) -> std::result::Result<InvoiceItemsList, InvoiceModelError> {
     let mut documents = documents.into_iter().collect::<Vec<_>>();
     if documents.is_empty() {
         return Err(InvoiceModelError::invalid(
@@ -222,10 +231,7 @@ pub fn reassemble_invoice_lines(
         invoice_lines.extend(document.invoice_lines.invoice_line);
     }
 
-    Ok(ReassembledInvoiceLines {
-        invoice_id,
-        invoice_lines,
-    })
+    InvoiceItemsList::new(invoice_id, InvoiceLines::new(invoice_lines))
 }
 
 fn optional_text(value: Option<&str>) -> String {
@@ -289,7 +295,7 @@ mod tests {
 
         let merged = reassemble_invoice_lines(chunks.into_iter().rev()).unwrap();
         assert_eq!(merged.invoice_id, "INV-1");
-        assert_eq!(merged.invoice_lines, lines);
+        assert_eq!(merged.invoice_lines.invoice_line, lines);
     }
 
     #[test]
@@ -316,7 +322,7 @@ mod tests {
         assert_eq!(payloads.len(), 3);
         let decoded = decode_chunks(&payloads).unwrap();
         assert_eq!(decoded.invoice_id, "INV-1");
-        assert_eq!(decoded.invoice_lines, lines);
+        assert_eq!(decoded.invoice_lines.invoice_line, lines);
     }
 
     #[test]

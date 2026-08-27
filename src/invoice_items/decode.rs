@@ -1,8 +1,9 @@
 //! INVOICE ITEMS by square payload and TSV decoding.
 
-use super::encode::{reassemble_invoice_lines, ReassembledInvoiceLines};
+use super::encode::reassemble_invoice_lines;
 use super::models::{
-    DeliveryNoteReference, InvoiceItems, InvoiceLine, InvoiceLines, OrderReference,
+    DeliveryNoteReference, InvoiceItems, InvoiceItemsList, InvoiceLine, InvoiceLines,
+    OrderReference,
 };
 use crate::{
     codec::{self, Header},
@@ -33,7 +34,7 @@ pub fn decode(payload: &str) -> Result<InvoiceItems> {
 }
 
 /// Decode and reassemble a complete set of INVOICE ITEMS payloads.
-pub fn decode_chunks<I, S>(payloads: I) -> Result<ReassembledInvoiceLines>
+pub fn decode_chunks<I, S>(payloads: I) -> Result<InvoiceItemsList>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
