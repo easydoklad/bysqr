@@ -1,6 +1,6 @@
 [package]
 name = "bysqr"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 description = "PAY, INVOICE and INVOICE ITEMS by square encoder and decoder"
 license = "MIT"

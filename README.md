@@ -5,22 +5,24 @@ encoder/decoder written in Rust.
 
 ## Notice
 
-Work on the project is still in progress. It is not suitable for a production run, until version 1.0, since not
-all features are implemented. Current version is very rough proof of concept. 
-It is very likely there will be breaking changes until 1.0, before settling on some stable API.
+Version 0.1 provides complete PAY, INVOICE and INVOICE ITEMS encoder/decoder
+workflows. The project remains pre-1.0: public APIs may still change as more
+independent interoperability feedback becomes available.
 
-The goal of the project is to provide full encoder and decoder implementations for PAY by square and Invoice by square,
-without relying on external services and with enough portability to compile for various targets.
+The project provides encoder and decoder implementations without relying on
+external services and is designed to compile for multiple native targets and
+WebAssembly.
 
 ## Installation
 
-You can download `bysqr` cli application from [Releases](https://github.com/bysqr/bysqr/releases) page.
+You can download the `bysqr` CLI application from the
+[Releases](https://github.com/easydoklad/bysqr/releases) page.
 There are precompiled binaries for macOS, Linux and Windows, for x86 and ARM architectures. 
 You can find there also a wasm build if you are interested.
 
 All binaries are compiled in two versions - the full version and headless version. The headless version does not have
-GUI and is ment to be run only from command line or shipped with your application. Hence, the headless version does not have
-any GUI related features, such as QR code preview. It's size is however much smaller than the full version.
+GUI and is meant to be run only from command line or shipped with your application. Hence, the headless version does not have
+any GUI related features, such as QR code preview. Its size is however much smaller than the full version.
 
 ## Usage
 
@@ -410,10 +412,12 @@ wasm-pack build --target web --features wasm
 - [x] INVOICE model, encoder and decoder for all five document types
 - [x] INVOICE JSON/XML and JSON Schema
 - [x] INVOICE QR branding and raster scan verification
-- [ ] INVOICE ITEMS model, encoder and decoder
-- [ ] additional INVOICE interoperability fixtures
-- [ ] theming
-- [ ] support for different logo position
-- [ ] general code refactoring
+- [x] INVOICE ITEMS model, encoder, decoder and multi-QR reassembly
+- [x] additional INVOICE and INVOICE ITEMS interoperability fixtures
+- [x] approved PAY and INVOICE themes
+- [x] approved logo positions and print/electronic layouts
+- [x] fallible public QR and raster API
 - [x] PAY encoder conformance tests
 - [x] INVOICE encoder/decoder conformance tests
+- [ ] stabilize the public API based on 0.x integration feedback
+- [ ] add browser and npm integration
