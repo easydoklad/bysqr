@@ -659,6 +659,13 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
 }
 
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("error: {error}");
+        std::process::exit(1);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_generated_items_output;
@@ -683,12 +690,5 @@ mod tests {
         ] {
             assert!(!is_generated_items_output(name, "svg"), "{name}");
         }
-    }
-}
-
-fn main() {
-    if let Err(error) = run() {
-        eprintln!("error: {error}");
-        std::process::exit(1);
     }
 }
