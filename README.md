@@ -381,6 +381,10 @@ Run the complete suite with:
 cargo test --all-features
 ```
 
+The `Tests` GitHub Actions workflow runs formatting, Clippy, the complete Rust
+suite, crate package verification, and the WASM/Node boundary suite on every
+push and pull request.
+
 Valid offline fixtures under `tests/fixtures/pay`, `tests/fixtures/invoice` and
 `tests/fixtures/invoice-items` cover known payloads and XSD-derived cases. The
 Items fixtures include named/EAN lines, references, a negative deposit, and a
