@@ -54,7 +54,7 @@ enum Commands {
         #[arg(long = "overwrite")]
         overwrite: bool,
 
-        /// PAY or INVOICE logo composition from the official logo manual.
+        /// PAY or INVOICE logo composition from the by-square logo manual.
         #[arg(long = "logo-layout", value_enum)]
         logo_layout: Option<LogoLayoutArg>,
 
@@ -62,7 +62,7 @@ enum Commands {
         #[arg(long = "logo-position", value_enum)]
         logo_position: Option<LogoPositionArg>,
 
-        /// Approved family-specific PAY or INVOICE color variation.
+        /// Family-specific PAY or INVOICE color variation.
         #[arg(long = "logo-color", value_enum)]
         logo_color: Option<LogoColorArg>,
     },

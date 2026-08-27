@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   @media (max-width: 560px) {{ body {{ padding: 16px; }} .pair {{ grid-template-columns: 1fr; }} }}
 </style>
 <h1>PAY and INVOICE by-square theme preview</h1>
-<p>All 32 logo-manual presets. Each semantic color maps to the approved family-specific palette.</p>
+<p>All 32 logo-manual presets. Light and dark use the family palette; gray and black are shared.</p>
 <main>{cards}</main>
 </html>
 "#

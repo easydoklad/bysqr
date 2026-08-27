@@ -1,12 +1,12 @@
 # WebAssembly adapter contract
 
-The `wasm` feature exposes the low-level WebAssembly contract intended for the
-future `@easydoklad/bysqr` TypeScript package. The ABI version is `1`.
+The `wasm` feature exposes the low-level WebAssembly contract used by JavaScript
+SDKs. The ABI version is `1`.
 
-The boundary deliberately uses only strings, numbers, and byte arrays. Canonical
-PAY, INVOICE, and INVOICE ITEMS documents are JSON or XML strings; encoded QR
-payloads are Base32hex strings; PNG and JPEG results are returned as
-`Uint8Array`. Rust domain structs are not exposed as JavaScript classes.
+The ABI uses strings, numbers, and byte arrays. PAY, INVOICE, and INVOICE ITEMS
+documents cross it as JSON or XML strings; encoded QR payloads are Base32hex
+strings; PNG and JPEG results are returned as `Uint8Array`. Rust domain structs
+are not exposed as JavaScript classes.
 
 ## Exports
 
@@ -43,12 +43,9 @@ The chunk decoder returns the canonical `InvoiceItemsList` shape:
 
 ## Encoding versus rendering
 
-The `encode_*` functions accept canonical source documents and create payloads.
-The `render_*` functions accept an already encoded payload, classify and validate
-it with the Rust decoder, and then render its matching QR artwork. This split is
-intentional: a TypeScript caller can store or transport the payload without
-rendering it, and can render a received payload without re-creating its source
-document.
+The `encode_*` functions create payloads from source documents. The `render_*`
+functions validate and render an existing payload. Callers can therefore store
+or transport a payload independently of its source document and rendering.
 
 ## Render options
 
@@ -108,10 +105,10 @@ The adapter can additionally report `SERIALIZE` if it cannot produce one of its
 JSON return strings. Family model errors are normalized as `INVALID_INPUT` with
 their model `field` preserved.
 
-## Browser initialization
+## Runtime initialization
 
-The release archive uses wasm-pack's `web` target. In environments such as Node
-that do not fetch the `.wasm` URL automatically, pass the WASM bytes explicitly:
+The release archive uses wasm-pack's `web` target. Browsers can load the
+generated `.wasm` URL. In runtimes such as Node, pass the WASM bytes explicitly:
 
 ```js
 import { readFile } from "node:fs/promises";

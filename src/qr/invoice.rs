@@ -12,7 +12,7 @@ use super::LogoTheme;
 /// quiet zone. The remaining four canvas units separate it from the frame.
 pub(crate) const QR_MAX_DIMENSION: u32 = 504;
 
-/// Add the official-color Invoice frame, wordmark, and document icon.
+/// Add the orange Invoice frame, wordmark, and document icon.
 ///
 /// The caller must insert the white background and centered QR matrix first.
 /// Keeping this as a decoration-only hook makes it impossible for the branding

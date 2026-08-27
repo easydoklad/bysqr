@@ -22,7 +22,7 @@ pub const CONTAINER_HEIGHT: f32 = 600.0;
 /// This keeps caller-controlled dimensions from causing unbounded allocations.
 pub const MAX_RASTER_DIMENSION: u32 = 8_192;
 
-/// Approved by-square logo composition.
+/// Logo composition defined by the by-square logo manual.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LogoLayout {
     /// Framed composition intended for print and general-purpose output.
@@ -31,7 +31,7 @@ pub enum LogoLayout {
     Electronic,
 }
 
-/// Approved placement of the by-square branding around the QR matrix.
+/// Placement of the by-square branding around the QR matrix.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LogoPosition {
     Bottom,
@@ -40,7 +40,7 @@ pub enum LogoPosition {
     Right,
 }
 
-/// Approved semantic color variation from the logo manual.
+/// Semantic color variation from the logo manual.
 ///
 /// PAY and INVOICE use different brand colors for the light and dark
 /// variants. Gray and black are shared.
@@ -82,7 +82,7 @@ impl LogoPosition {
     pub const ALL: [Self; 4] = [Self::Bottom, Self::Top, Self::Left, Self::Right];
 }
 
-/// One logo-manual-compliant PAY or INVOICE visual theme.
+/// One PAY or INVOICE visual theme defined by the logo manual.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LogoTheme {
     pub layout: LogoLayout,
@@ -214,12 +214,12 @@ fn create_empty_svg(width: u32, height: u32) -> Element {
     final_svg
 }
 
-/// Render a PAY by square payload with the default approved theme.
+/// Render a PAY by square payload with the default theme.
 pub fn create_pay_svg(content: &str) -> Result<Vec<u8>> {
     create_pay_svg_with_theme(content, LogoTheme::default())
 }
 
-/// Render a PAY by square payload using one approved logo-manual theme.
+/// Render a PAY by square payload using one logo-manual theme.
 pub fn create_pay_svg_with_theme(content: &str, theme: LogoTheme) -> Result<Vec<u8>> {
     let code = QrCode::with_error_correction_level(content.as_bytes(), EcLevel::L)
         .map_err(|error| Error::QrEncode(error.to_string()))?;
@@ -249,7 +249,7 @@ pub fn create_invoice_svg(content: &str) -> Result<Vec<u8>> {
     create_invoice_svg_with_theme(content, LogoTheme::default())
 }
 
-/// Render an INVOICE by square payload using one approved logo-manual theme.
+/// Render an INVOICE by square payload using one logo-manual theme.
 pub fn create_invoice_svg_with_theme(content: &str, theme: LogoTheme) -> Result<Vec<u8>> {
     let code = QrCode::with_error_correction_level(content.as_bytes(), EcLevel::L)
         .map_err(|error| Error::QrEncode(error.to_string()))?;

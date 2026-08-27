@@ -1,4 +1,4 @@
-//! Shared placement rules for logo-manual-compliant PAY and INVOICE artwork.
+//! Shared placement rules for PAY and INVOICE artwork defined by the logo manual.
 
 use std::collections::HashMap;
 
