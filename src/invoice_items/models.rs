@@ -43,6 +43,75 @@ impl<'de> Deserialize<'de> for InvoiceItems {
     }
 }
 
+/// A complete ordered list of invoice items assembled at the application level.
+///
+/// Unlike [`InvoiceItems`], this aggregate is not an independently encoded QR
+/// block and therefore has no `FirstInvoiceLineID` field.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename = "InvoiceItemsList", rename_all = "PascalCase")]
+pub struct InvoiceItemsList {
+    #[serde(rename = "InvoiceID")]
+    pub invoice_id: String,
+    pub invoice_lines: InvoiceLines,
+}
+
+#[derive(Deserialize)]
+#[serde(
+    rename = "InvoiceItemsList",
+    rename_all = "PascalCase",
+    deny_unknown_fields
+)]
+struct InvoiceItemsListWire {
+    #[serde(rename = "InvoiceID")]
+    invoice_id: String,
+    invoice_lines: InvoiceLines,
+}
+
+impl<'de> Deserialize<'de> for InvoiceItemsList {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = InvoiceItemsListWire::deserialize(deserializer)?;
+        Self::new(wire.invoice_id, wire.invoice_lines).map_err(serde::de::Error::custom)
+    }
+}
+
+impl InvoiceItemsList {
+    pub fn new(invoice_id: impl Into<String>, invoice_lines: InvoiceLines) -> ModelResult<Self> {
+        let document = Self {
+            invoice_id: invoice_id.into(),
+            invoice_lines,
+        };
+        document.validate()?;
+        Ok(document)
+    }
+
+    pub fn validate(&self) -> ModelResult<()> {
+        validate_invoice_lines(&self.invoice_lines)
+    }
+
+    pub fn from_xml_str(source: &str) -> ModelResult<Self> {
+        validate_invoice_items_list_xml_root(source)?;
+        quick_xml::de::from_str(source)
+            .map_err(|error| InvoiceModelError::invalid("InvoiceItemsList XML", error.to_string()))
+    }
+
+    pub fn to_xml_string(&self) -> ModelResult<String> {
+        self.validate()?;
+        let body = quick_xml::se::to_string(self).map_err(|error| {
+            InvoiceModelError::invalid("InvoiceItemsList XML", error.to_string())
+        })?;
+        if !body.starts_with("<InvoiceItemsList>") {
+            return Err(InvoiceModelError::invalid(
+                "InvoiceItemsList XML",
+                "serialized root element is not InvoiceItemsList",
+            ));
+        }
+        Ok(body)
+    }
+}
+
 impl InvoiceItems {
     pub fn new(
         invoice_id: impl Into<String>,
@@ -59,16 +128,7 @@ impl InvoiceItems {
     }
 
     pub fn validate(&self) -> ModelResult<()> {
-        if self.invoice_lines.invoice_line.is_empty() {
-            return Err(InvoiceModelError::invalid(
-                "InvoiceLines",
-                "must contain at least one InvoiceLine",
-            ));
-        }
-        for line in &self.invoice_lines.invoice_line {
-            line.validate()?;
-        }
-        Ok(())
+        validate_invoice_lines(&self.invoice_lines)
     }
 
     /// Reports advisory `bsqr:maxLength` overflows without rejecting data.
@@ -377,6 +437,76 @@ fn validate_xml_root(source: &str) -> ModelResult<()> {
             }
         }
     }
+}
+
+fn validate_invoice_items_list_xml_root(source: &str) -> ModelResult<()> {
+    use quick_xml::events::Event;
+
+    let mut reader = quick_xml::Reader::from_str(source);
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(root)) | Ok(Event::Empty(root)) => {
+                if root.name().as_ref() != b"InvoiceItemsList" {
+                    return Err(InvoiceModelError::invalid(
+                        "InvoiceItemsList XML",
+                        "root element must be InvoiceItemsList",
+                    ));
+                }
+                for attribute in root.attributes() {
+                    let attribute = attribute.map_err(|error| {
+                        InvoiceModelError::invalid("InvoiceItemsList XML", error.to_string())
+                    })?;
+                    let key = attribute.key.as_ref();
+                    let value = attribute
+                        .decode_and_unescape_value(reader.decoder())
+                        .map_err(|error| {
+                            InvoiceModelError::invalid("InvoiceItemsList XML", error.to_string())
+                        })?;
+                    if (key == b"xmlns" || key.starts_with(b"xmlns:"))
+                        && value == BYSQUARE_NAMESPACE
+                    {
+                        return Err(InvoiceModelError::invalid(
+                            "InvoiceItemsList XML",
+                            "the application-level aggregate must not use the by-square namespace",
+                        ));
+                    }
+                    if key == b"type" || key.ends_with(b":type") {
+                        return Err(InvoiceModelError::invalid(
+                            "InvoiceItemsList XML",
+                            "the application-level aggregate must not use xsi:type",
+                        ));
+                    }
+                }
+                return Ok(());
+            }
+            Ok(Event::Eof) => {
+                return Err(InvoiceModelError::invalid(
+                    "InvoiceItemsList XML",
+                    "document has no root element",
+                ));
+            }
+            Ok(_) => {}
+            Err(error) => {
+                return Err(InvoiceModelError::invalid(
+                    "InvoiceItemsList XML",
+                    error.to_string(),
+                ));
+            }
+        }
+    }
+}
+
+fn validate_invoice_lines(invoice_lines: &InvoiceLines) -> ModelResult<()> {
+    if invoice_lines.invoice_line.is_empty() {
+        return Err(InvoiceModelError::invalid(
+            "InvoiceLines",
+            "must contain at least one InvoiceLine",
+        ));
+    }
+    for line in &invoice_lines.invoice_line {
+        line.validate()?;
+    }
+    Ok(())
 }
 
 fn diagnose(
