@@ -226,7 +226,7 @@ the project with Cargo:
 cargo build --release
 ```
 
-Cargo writes the `bysqrcli` executable and Rust library to `target/release`.
+Cargo writes the `bysqr` executable and Rust library to `target/release`.
 
 ## Rust API
 

@@ -27,7 +27,7 @@ fn fixture() -> Fixture {
 }
 
 fn run_with_stdin(args: &[&str], input: &[u8]) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -74,7 +74,7 @@ fn temp_path(label: &str) -> PathBuf {
 }
 
 fn run(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(args)
         .output()
         .unwrap()
@@ -99,7 +99,7 @@ fn encodes_canonical_json_file() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/pay/json/standing-order.json"
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(["encode", "--src", source, "--format", "svg"])
         .output()
         .unwrap();
@@ -120,7 +120,7 @@ fn encodes_json_from_stdin_like_file_source() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/pay/json/standing-order.json"
     );
-    let file_output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let file_output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(["encode", "--src", source, "--format", "svg"])
         .output()
         .unwrap();
@@ -163,7 +163,7 @@ fn encodes_canonical_invoice_json_with_invoice_branding() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/invoice/schema/minimal-header-invoice.json"
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(["encode", "--src", source, "--format", "svg"])
         .output()
         .unwrap();
@@ -184,7 +184,7 @@ fn applies_logo_theme_options_to_invoice() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/invoice/schema/minimal-header-invoice.json"
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args([
             "encode",
             "--src",
@@ -218,7 +218,7 @@ fn applies_logo_theme_options_to_pay_with_the_pay_palette() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/pay/json/standing-order.json"
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args([
             "encode",
             "--src",
@@ -252,7 +252,7 @@ fn rejects_logo_theme_options_for_invoice_items() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/invoice-items/valid-interoperability-offline-mixed-lines.json"
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args([
             "encode",
             "--src",
@@ -283,7 +283,7 @@ fn reports_invalid_raster_options_without_panicking() {
         ("jpeg", "--quality", "0", "invalid quality"),
         ("jpeg", "--quality", "101", "invalid quality"),
     ] {
-        let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
             .args(["encode", "--src", source, "--format", format, option, value])
             .output()
             .unwrap();
@@ -303,7 +303,7 @@ fn encodes_canonical_invoice_items_json_with_items_branding() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/invoice-items/valid-interoperability-offline-mixed-lines.json"
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(["encode", "--src", source, "--format", "svg"])
         .output()
         .unwrap();
@@ -331,7 +331,7 @@ fn decodes_generated_qr_image_file() {
     let source = std::env::temp_dir().join(format!("bysqr-cli-pay-{}.png", std::process::id()));
     std::fs::write(&source, png).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args([
             "decode",
             "--src",
@@ -367,7 +367,7 @@ fn decodes_generated_invoice_qr_image_file() {
     let source = std::env::temp_dir().join(format!("bysqr-cli-invoice-{}.png", std::process::id()));
     std::fs::write(&source, png).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args([
             "decode",
             "--src",
@@ -402,7 +402,7 @@ fn reports_disabled_qr_image_reader() {
     let source = std::env::temp_dir().join(format!("bysqr-cli-{}.png", std::process::id()));
     std::fs::write(&source, png).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(["decode", "--src", source.to_str().unwrap()])
         .output()
         .unwrap();
@@ -417,7 +417,7 @@ fn reports_disabled_qr_image_reader() {
 #[test]
 fn decodes_payload_to_json() {
     let fixture = fixture();
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(["decode", "--src", &fixture.payload, "--format", "json"])
         .output()
         .unwrap();
@@ -434,7 +434,7 @@ fn decodes_payload_to_json() {
 #[test]
 fn decodes_payload_from_stdin_like_inline_source() {
     let fixture = fixture();
-    let inline_output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let inline_output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(["decode", "--src", &fixture.payload, "--format", "json"])
         .output()
         .unwrap();
@@ -461,7 +461,7 @@ fn decodes_payload_from_stdin_like_inline_source() {
 #[test]
 fn decodes_payload_to_xml() {
     let fixture = fixture();
-    let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
         .args(["decode", "--src", &fixture.payload, "--format", "xml"])
         .output()
         .unwrap();
@@ -483,7 +483,7 @@ fn decodes_invoice_payload_to_json_and_xml() {
     .trim();
 
     for format in ["json", "xml"] {
-        let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
             .args(["decode", "--src", payload, "--format", format])
             .output()
             .unwrap();
@@ -513,7 +513,7 @@ fn decodes_invoice_items_payload_to_json_and_xml() {
     .trim();
 
     for format in ["json", "xml"] {
-        let output = Command::new(env!("CARGO_BIN_EXE_bysqrcli"))
+        let output = Command::new(env!("CARGO_BIN_EXE_bysqr"))
             .args(["decode", "--src", payload, "--format", format])
             .output()
             .unwrap();

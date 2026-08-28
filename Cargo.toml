@@ -11,7 +11,7 @@ readme = "README.md"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "bysqrcli"
+name = "bysqr"
 path = "src/bin/bysqr.rs"
 
 [[bin]]

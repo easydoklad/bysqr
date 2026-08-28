@@ -34,10 +34,10 @@ jobs:
       - name: Build
         run: |
           mkdir -p target/dist
-          cargo build --release --bin bysqrcli --target $TARGET
-          cp target/$TARGET/release/bysqrcli target/dist/$DIST_HEADLESS
-          cargo build --release --bin bysqrcli --target $TARGET --features preview
-          cp target/$TARGET/release/bysqrcli target/dist/$DIST
+          cargo build --release --bin bysqr --target $TARGET
+          cp target/$TARGET/release/bysqr target/dist/$DIST_HEADLESS
+          cargo build --release --bin bysqr --target $TARGET --features preview
+          cp target/$TARGET/release/bysqr target/dist/$DIST
       - name: Import Apple signing certificate
         shell: bash
         env:
@@ -196,10 +196,10 @@ jobs:
       - name: Build
         run: |
           mkdir -p target/dist
-          cargo build --release --bin bysqrcli --target $TARGET
-          cp target/$TARGET/release/bysqrcli target/dist/$DIST_HEADLESS
-          cargo build --release --bin bysqrcli --target $TARGET --features preview
-          cp target/$TARGET/release/bysqrcli target/dist/$DIST
+          cargo build --release --bin bysqr --target $TARGET
+          cp target/$TARGET/release/bysqr target/dist/$DIST_HEADLESS
+          cargo build --release --bin bysqr --target $TARGET --features preview
+          cp target/$TARGET/release/bysqr target/dist/$DIST
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
@@ -273,10 +273,10 @@ jobs:
       - name: Build
         run: |
           mkdir -Force target\dist
-          cargo build --release --bin bysqrcli --target $env:TARGET
-          Copy-Item "target\$env:TARGET\release\bysqrcli.exe" "target\dist\$env:DIST_HEADLESS"
-          cargo build --release --bin bysqrcli --target $env:TARGET --features preview
-          Copy-Item "target\$env:TARGET\release\bysqrcli.exe" "target\dist\$env:DIST"
+          cargo build --release --bin bysqr --target $env:TARGET
+          Copy-Item "target\$env:TARGET\release\bysqr.exe" "target\dist\$env:DIST_HEADLESS"
+          cargo build --release --bin bysqr --target $env:TARGET --features preview
+          Copy-Item "target\$env:TARGET\release\bysqr.exe" "target\dist\$env:DIST"
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
