@@ -351,7 +351,6 @@ jobs:
   publish-crate:
     name: Publish crate
     needs: release
-    if: ${{ needs.release.result == 'success' && vars.CRATES_IO_TRUSTED_PUBLISHING == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
