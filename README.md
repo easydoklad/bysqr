@@ -11,6 +11,24 @@ external service is required.
 
 ## Installation
 
+Add the Rust library to an application with:
+
+```shell
+cargo add bysqr
+```
+
+The optional `qr-reader` feature adds QR extraction from PNG and JPEG images:
+
+```shell
+cargo add bysqr --features qr-reader
+```
+
+Install the headless CLI directly from crates.io with:
+
+```shell
+cargo install bysqr
+```
+
 Download the `bysqr` CLI from the
 [Releases](https://github.com/easydoklad/bysqr/releases) page. Prebuilt native
 binaries are available for macOS, Linux and Windows on x86_64 and AArch64.
@@ -284,7 +302,7 @@ JPEG quality must be 1–100.
 2 × 4 × 4 preset matrix. A deterministic visual gallery can be generated with:
 
 ```shell
-cargo run --bin theme-preview
+cargo run --example theme_preview
 ```
 
 The resulting `target/theme-preview.html` compares PAY and INVOICE across all
@@ -338,6 +356,10 @@ cargo test --all-features
 The `Tests` GitHub Actions workflow runs formatting, Clippy, the complete Rust
 suite, crate package verification, and the WASM/Node boundary suite on every
 push and pull request.
+
+Maintainer release instructions, including the initial crates.io publication
+and subsequent Trusted Publishing workflow, are in
+[`docs/releasing.md`](docs/releasing.md).
 
 Offline fixtures cover known payloads, XSD-derived cases and multi-QR INVOICE
 ITEMS. End-to-end tests also render and scan PAY, INVOICE and ITEMS images. They

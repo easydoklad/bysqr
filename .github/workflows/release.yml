@@ -5,11 +5,53 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Configure Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Verify tag, manifest and changelog versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          crate_version="$(
+            cargo metadata --locked --no-deps --format-version=1 |
+              jq -r '.packages[] | select(.name == "bysqr") | .version'
+          )"
+          tag_version="${GITHUB_REF_NAME#v}"
+
+          if [[ "$GITHUB_REF_NAME" != "v${crate_version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match bysqr ${crate_version}" >&2
+            exit 1
+          fi
+          if ! grep -Fq "## ${tag_version} - " CHANGELOG.md; then
+            echo "CHANGELOG.md has no release heading for ${tag_version}" >&2
+            exit 1
+          fi
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint
+        run: cargo clippy --locked --all-features --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked --all-features
+      - name: Verify crate package
+        run: cargo package --locked
+
   build-darwin:
+    needs: validate
     runs-on: macos-latest
     strategy:
       matrix:
@@ -34,9 +76,9 @@ jobs:
       - name: Build
         run: |
           mkdir -p target/dist
-          cargo build --release --bin bysqr --target $TARGET
+          cargo build --locked --release --bin bysqr --target $TARGET
           cp target/$TARGET/release/bysqr target/dist/$DIST_HEADLESS
-          cargo build --release --bin bysqr --target $TARGET --features preview
+          cargo build --locked --release --bin bysqr --target $TARGET --features preview
           cp target/$TARGET/release/bysqr target/dist/$DIST
       - name: Import Apple signing certificate
         shell: bash
@@ -161,15 +203,15 @@ jobs:
           rm -f \
             "$RUNNER_TEMP/developer-id.p12" \
             "$RUNNER_TEMP/notary-api-key.p8"
-      - name: Release
-        uses: softprops/action-gh-release@v3
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
         with:
-          prerelease: true
-          files: target/dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-darwin-${{ matrix.arch }}
+          path: target/dist/*
+          if-no-files-found: error
 
   build-linux:
+    needs: validate
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -196,19 +238,19 @@ jobs:
       - name: Build
         run: |
           mkdir -p target/dist
-          cargo build --release --bin bysqr --target $TARGET
+          cargo build --locked --release --bin bysqr --target $TARGET
           cp target/$TARGET/release/bysqr target/dist/$DIST_HEADLESS
-          cargo build --release --bin bysqr --target $TARGET --features preview
+          cargo build --locked --release --bin bysqr --target $TARGET --features preview
           cp target/$TARGET/release/bysqr target/dist/$DIST
-      - name: Release
-        uses: softprops/action-gh-release@v3
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
         with:
-          prerelease: true
-          files: target/dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-linux-${{ matrix.arch }}
+          path: target/dist/*
+          if-no-files-found: error
 
   build-wasm:
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -240,15 +282,15 @@ jobs:
           tar -C target/wasm-artifact -czf "target/dist/${DIST_NAME}.tar.gz" "${DIST_NAME}"
           cd target/dist
           sha256sum "${DIST_NAME}.tar.gz" > "${DIST_NAME}.tar.gz.sha256"
-      - name: Release
-        uses: softprops/action-gh-release@v3
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
         with:
-          prerelease: true
-          files: target/dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-wasm
+          path: target/dist/*
+          if-no-files-found: error
 
   build-windows:
+    needs: validate
     runs-on: windows-latest
     strategy:
       matrix:
@@ -273,14 +315,56 @@ jobs:
       - name: Build
         run: |
           mkdir -Force target\dist
-          cargo build --release --bin bysqr --target $env:TARGET
+          cargo build --locked --release --bin bysqr --target $env:TARGET
           Copy-Item "target\$env:TARGET\release\bysqr.exe" "target\dist\$env:DIST_HEADLESS"
-          cargo build --release --bin bysqr --target $env:TARGET --features preview
+          cargo build --locked --release --bin bysqr --target $env:TARGET --features preview
           Copy-Item "target\$env:TARGET\release\bysqr.exe" "target\dist\$env:DIST"
-      - name: Release
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-${{ matrix.arch }}
+          path: target/dist/*
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub release
+    needs: [build-darwin, build-linux, build-wasm, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: target/dist
+          merge-multiple: true
+      - name: Create release
         uses: softprops/action-gh-release@v3
         with:
           prerelease: true
+          fail_on_unmatched_files: true
           files: target/dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-crate:
+    name: Publish crate
+    needs: release
+    if: ${{ needs.release.result == 'success' && vars.CRATES_IO_TRUSTED_PUBLISHING == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Configure Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Authenticate with crates.io
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish crate
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

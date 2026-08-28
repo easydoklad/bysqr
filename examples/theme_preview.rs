@@ -7,7 +7,7 @@ use bysqr::qr::{
 
 const PAY_PAYLOAD: &str = "000620000OTQ8GD9P3146TKTM0EOR8GS6MCNQU8Q6DBV3A4QK1JTORU2PBR6CBS3SL85PJRVSIR8RE49VEGTF5JRTM45DTL9US038PVH5GCIC1483NLI0MGU6FF0KB8";
 const INVOICE_PAYLOAD: &str = include_str!(
-    "../../tests/fixtures/invoice/valid-interoperability-offline-official-current.payload.txt"
+    "../tests/fixtures/invoice/valid-interoperability-offline-official-current.payload.txt"
 );
 
 fn main() -> Result<(), Box<dyn Error>> {

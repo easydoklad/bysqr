@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.3.0 - 2026-08-28
+
+### Added
+
+- First public Rust library and CLI package for crates.io.
+- Version-gated release validation and automated crates.io Trusted Publishing
+  for releases after the initial manual publication.
+
+### Changed
+
+- Renamed the Cargo CLI binary from `bysqrcli` to `bysqr`.
+- Moved the internal theme gallery generator from an installed binary to a
+  Cargo example.
+- Disabled unused image-format features to reduce the default dependency graph.
+- GitHub release assets are now collected before creating one atomic release.
+
+### Compatibility
+
+- This remains a pre-1.0 release. Public Rust and WebAssembly APIs may change
+  in subsequent 0.x versions.
+
 ## 0.2.1 - 2026-08-27
 
 ### Changed

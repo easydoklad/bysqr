@@ -21,11 +21,11 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Lint
-        run: cargo clippy --all-features --all-targets -- -D warnings
+        run: cargo clippy --locked --all-features --all-targets -- -D warnings
       - name: Test
-        run: cargo test --all-features
+        run: cargo test --locked --all-features
       - name: Verify package
-        run: cargo package
+        run: cargo package --locked
 
   wasm:
     name: WebAssembly
